@@ -1,0 +1,54 @@
+project:
+  name: "AutoRCI_Control"
+
+paths:
+  input_root: "input"
+  samples_root: "samples"
+  reference_root: "reference"
+  output_root: "output"
+  archive_root: "archive"
+  logs_root: "logs"
+  reports_dir: "output/reports"
+  powerbi_dir: "output/powerbi"
+  anomalies_dir: "output/anomalies"
+
+file_detection:
+  extensions:
+    erp: [".xlsx", ".xls", ".csv"]
+    rci: [".txt", ".csv", ".xlsx", ".xls"]
+    pdf: [".pdf"]
+  min_required:
+    erp: 0
+    rci: 0
+    pdf: 0
+
+processing:
+  archive_after_success: true
+  output_reports: true
+  run_timezone: "Africa/Casablanca"
+
+reconciliation:
+  amount_tolerance: 1.0
+  amount_tolerance_mad: 1.0
+  date_filter:
+    enabled: true
+    mode: auto
+    days_before: 3
+    days_after: 1
+    fallback_days: 7
+
+reference:
+  rci_coverage:
+    enabled: true
+    path: reference
+
+email:
+  enabled: false
+  sender: ""
+  recipients: []
+  smtp_host: ""
+  smtp_port: 587
+  smtp_username: ""
+  smtp_password_env_var: "AUTORCI_SMTP_PASSWORD"
+  use_tls: true
+  use_ssl: false
