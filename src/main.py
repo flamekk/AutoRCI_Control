@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from src.audit import enrich_report_with_audits
     from src.config import ensure_project_structure, get_project_root, load_config
     from src.date_filter import apply_reconciliation_date_filter
     from src.debug_matching import log_debug_invoice, log_invoice_presence, write_matching_debug
@@ -26,6 +27,7 @@ try:
     from src.reconcile import reconcile
     from src.report_excel import write_excel_report
 except ModuleNotFoundError:  # pragma: no cover - used when running python src/main.py.
+    from audit import enrich_report_with_audits
     from config import ensure_project_structure, get_project_root, load_config
     from date_filter import apply_reconciliation_date_filter
     from debug_matching import log_debug_invoice, log_invoice_presence, write_matching_debug
@@ -185,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             raise PipelineError(str(exc)) from exc
         filtered_erp_records = date_filter_result.erp_records
+        filtered_rci_records = date_filter_result.rci_records
+        filtered_pdf_records = date_filter_result.pdf_records
 
         LOGGER.info("Etape 7/12 - Reconciliation ERP / RCI / PDF")
         reconciliation_config = config.get("reconciliation", {})
@@ -193,18 +197,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         report = reconcile(
             filtered_erp_records,
-            rci_records,
-            pdf_records,
+            filtered_rci_records,
+            filtered_pdf_records,
             {},
             amount_tolerance=amount_tolerance,
+            rci_out_of_period_records=date_filter_result.rci_out_of_period_records,
+            pdf_out_of_period_records=date_filter_result.pdf_out_of_period_records,
         )
         report.setdefault("summary", {}).update(date_filter_result.summary)
+        reference_names = (
+            coverage_reference.name_values
+            if coverage_reference is not None and coverage_reference.loaded
+            else []
+        )
+        report = enrich_report_with_audits(report, reference_names)
 
         anomalies_dir = project_root / config["paths"]["anomalies_dir"]
         matching_debug_path = write_matching_debug(
             filtered_erp_records,
-            rci_records,
-            pdf_records,
+            filtered_rci_records,
+            filtered_pdf_records,
             anomalies_dir,
             run_id,
         )
@@ -397,10 +409,14 @@ def _log_final_summary(
     LOGGER.info("ERP avant filtre date: %s", summary.get("erp_rows_before_date_filter", summary.get("erp_rows", 0)))
     LOGGER.info("ERP apres filtre date: %s", summary.get("erp_rows_after_date_filter", summary.get("erp_rows", 0)))
     LOGGER.info("ERP exclu par date: %s", summary.get("erp_rows_excluded_by_date", 0))
+    LOGGER.info("RCI avant filtre date: %s", summary.get("rci_rows_before_date_filter", summary.get("rci_rows", 0)))
+    LOGGER.info("RCI apres filtre date: %s", summary.get("rci_rows_after_date_filter", summary.get("rci_rows", 0)))
+    LOGGER.info("RCI exclu par periode: %s", summary.get("rci_rows_excluded_by_date", 0))
     LOGGER.info("OK: %s", summary.get("matched_invoices", 0))
     LOGGER.info("Manquantes RCI: %s", summary.get("unmatched_erp", 0))
     LOGGER.info("Hors scope RCI: %s", summary.get("out_of_scope_rci", 0))
     LOGGER.info("RCI seulement: %s", summary.get("unmatched_rci", 0))
+    LOGGER.info("RCI hors periode: %s", summary.get("rci_out_of_period", 0))
     LOGGER.info("Anomalies montant: %s", summary.get("amount_anomalies", 0))
     LOGGER.info("Anomalies date: %s", summary.get("date_anomalies", 0))
     LOGGER.info("Doublons: %s", summary.get("duplicates", 0))
@@ -408,6 +424,8 @@ def _log_final_summary(
     LOGGER.info("Montant impacte total: %s MAD", summary.get("total_impacted_amount", summary.get("total_amount_gap", 0)))
     LOGGER.info("Montant manquant RCI: %s MAD", summary.get("missing_rci_amount", 0))
     LOGGER.info("Taux de rapprochement: %s", summary.get("matching_rate", 0))
+    if summary.get("no_rci_flux_in_period_alert"):
+        LOGGER.warning("Attention : aucun flux RCI dans la période de rapprochement.")
     LOGGER.info("Rapport Excel: %s", report_path or "non genere")
     LOGGER.info("Historique Power BI: %s", history_path or "non genere")
     LOGGER.info("Email: %s", email_status)

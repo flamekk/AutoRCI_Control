@@ -110,4 +110,26 @@ def test_no_date_filter_disables_filter() -> None:
 
     assert args.no_date_filter is True
     assert len(result.erp_records) == 2
+    assert len(result.rci_records) == 1
     assert result.summary["date_filter_enabled"] is False
+
+
+def test_date_filter_applies_to_rci_and_keeps_out_of_period_separately() -> None:
+    erp = pd.DataFrame([_erp("VF1001", 200.0, "2026-04-30")])
+    rci = pd.DataFrame([_rci("VF1000", 100.0, "2026-04-29")])
+
+    result = apply_reconciliation_date_filter(
+        erp,
+        rci,
+        pd.DataFrame(),
+        DATE_FILTER_CONFIG,
+        date_from="2026-04-30",
+        date_to="2026-04-30",
+    )
+
+    assert len(result.rci_records) == 0
+    assert len(result.rci_out_of_period_records) == 1
+    assert result.summary["rci_rows_before_date_filter"] == 1
+    assert result.summary["rci_rows_after_date_filter"] == 0
+    assert result.summary["rci_rows_excluded_by_date"] == 1
+    assert result.summary["no_rci_flux_in_period_alert"] is True

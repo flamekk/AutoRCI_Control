@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Téléchargements - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Téléchargements</h1>
+    <p class="text-muted mb-0">Rapports, exports Power BI, anomalies et logs disponibles.</p>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for category, paths in files.items() %}
+    <div class="col-12 col-xl-6">
+      <div class="panel">
+        {% set meta = download_metadata[category] %}
+        <h2><i class="bi {{ meta.icon }} me-2"></i>{{ meta.label }}</h2>
+        {% if paths %}
+          <div class="list-group download-list">
+            {% for path in paths %}
+              <a class="list-group-item list-group-item-action download-item" href="{{ url_for('download_file', category=category, filename=path.name) }}">
+                <span class="download-name text-truncate" title="{{ path.name }}">
+                  <i class="bi bi-download me-2"></i>{{ path.name }}
+                </span>
+                <span class="download-meta">
+                  {{ path.stat().st_mtime|mtime }} · {{ path.stat().st_size|filesize }}
+                </span>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">Aucun fichier.</div>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

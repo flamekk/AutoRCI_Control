@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Dépôt des fichiers - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Dépôt des fichiers</h1>
+    <p class="text-muted mb-0">Déposez les fichiers quotidiens avant de lancer la réconciliation AutoRCI.</p>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for source_type in ["erp", "rci", "pdf", "reference"] %}
+    {% set meta = source_metadata[source_type] %}
+    <div class="col-12 col-lg-6">
+      <div class="panel upload-card">
+        <div class="upload-card-header">
+          <span class="source-badge"><i class="bi {{ meta.icon }}"></i></span>
+          <div>
+            <h2>{{ meta.label }}</h2>
+            <p>{{ meta.description }}</p>
+          </div>
+        </div>
+        <form method="post" enctype="multipart/form-data" class="upload-form">
+          <input type="hidden" name="source_type" value="{{ source_type }}">
+          <div class="mb-2">
+            <input class="form-control" type="file" name="file" required>
+          </div>
+          <div class="d-flex align-items-center justify-content-between gap-2">
+            <div class="extension-list">
+              {% for extension in allowed[source_type]|sort %}
+                <span class="badge rounded-pill text-bg-light">{{ extension }}</span>
+              {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Uploader</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="panel mt-3">
+  <h2><i class="bi bi-folder2-open me-2"></i>Fichiers présents</h2>
+  <div class="row g-3">
+    {% for source_type, paths in files.items() %}
+      <div class="col-12 col-lg-3">
+        <h3 class="file-list-title">{{ source_metadata[source_type].label }}</h3>
+        {% if paths %}
+          <ul class="list-group file-list">
+            {% for path in paths %}
+              <li class="list-group-item d-flex justify-content-between gap-2">
+                <span class="text-truncate" title="{{ path.name }}">{{ path.name }}</span>
+                <span class="text-muted small">{{ (path.stat().st_size / 1024)|round(1) }} Ko</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="empty-state">Aucun fichier.</div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

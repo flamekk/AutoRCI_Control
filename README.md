@@ -41,6 +41,10 @@ AutoRCI_Control/
 |   +-- pdf/
 +-- logs/
 +-- src/
++-- webapp/
++   +-- app.py
++   +-- templates/
++   +-- static/
 +-- tests/
 +-- config/
 |   +-- config.yaml
@@ -79,6 +83,45 @@ pip install -r requirements.txt
 ```
 
 Les dependances principales sont `pandas`, `openpyxl` et `pdfplumber`.
+
+## Dashboard Flask
+
+Une application web interne Flask + Bootstrap est disponible pour utiliser AutoRCI sans passer par le terminal.
+
+Elle permet de :
+
+- consulter les KPI du dernier traitement ;
+- deposer les fichiers ERP, RCI, PDF et le referentiel RCI ;
+- lancer une reconciliation en `dry-run` ou en execution reelle ;
+- filtrer les resultats et les ecarts ;
+- telecharger les rapports, exports Power BI, anomalies et logs ;
+- lire le dernier log d'execution.
+
+Installation :
+
+```powershell
+pip install -r requirements.txt
+```
+
+Lancement :
+
+```powershell
+python webapp/app.py
+```
+
+Ou :
+
+```powershell
+flask --app webapp/app run
+```
+
+URL :
+
+```text
+http://127.0.0.1:5000
+```
+
+Par defaut, le formulaire de traitement coche `dry-run` afin d'eviter l'envoi email et l'archivage accidentels.
 
 ## Execution En Mode Test
 

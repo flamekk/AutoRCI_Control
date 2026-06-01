@@ -1,0 +1,33 @@
+<div class="panel mb-3">
+  <form method="get" class="row g-3 align-items-end">
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="status">Statut</label>
+      <select class="form-select" id="status" name="status">
+        <option value="">Tous</option>
+        {% for status in options.statuses %}
+          <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="customer_name">Concessionnaire</label>
+      <input class="form-control" id="customer_name" name="customer_name" value="{{ filters.customer_name }}" list="customers" placeholder="Nom client">
+      <datalist id="customers">
+        {% for customer in options.customers %}
+          <option value="{{ customer }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+    <div class="col-12 col-md-2">
+      <label class="form-label" for="date_from">Date debut</label>
+      <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from }}">
+    </div>
+    <div class="col-12 col-md-2">
+      <label class="form-label" for="date_to">Date fin</label>
+      <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filters.date_to }}">
+    </div>
+    <div class="col-12 col-md-2 d-grid">
+      <button class="btn btn-primary" type="submit">Filtrer</button>
+    </div>
+  </form>
+</div>

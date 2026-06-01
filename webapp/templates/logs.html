@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Logs - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Logs</h1>
+    <p class="text-muted mb-0">Consultation du dernier journal d’exécution AutoRCI.</p>
+  </div>
+  <a href="{{ url_for('logs') }}" class="btn btn-outline-primary"><i class="bi bi-arrow-clockwise me-1"></i>Rafraîchir</a>
+</div>
+
+<div class="panel">
+  {% if log_file %}
+    <span class="badge text-bg-light log-file-badge"><i class="bi bi-file-earmark-text me-1"></i>{{ log_file.name }}</span>
+  {% endif %}
+  <pre class="log-box log-full">{{ content or "Aucun contenu a afficher." }}</pre>
+</div>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Tableau de bord opérationnel</h1>
+    <p class="text-muted mb-0">Pilotage quotidien du rapprochement entre les exports ERP Navision/Incadea et les flux RCI Banque.</p>
+  </div>
+  <div class="source-pill">
+    {% if summary_file %}
+      Source : {{ summary_file.name }}
+    {% else %}
+      Source : non disponible
+    {% endif %}
+  </div>
+</div>
+
+{% if dashboard_alerts %}
+  <div class="dashboard-alerts">
+    {% for alert in dashboard_alerts %}
+      <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+        <div>{{ alert }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="row g-3">
+  {% for kpi in kpis %}
+    <div class="col-12 col-sm-6 col-xl-3">
+      <div class="kpi-card {% if kpi.status %}kpi-{{ status_badge_class(kpi.status) }}{% endif %}">
+        <div class="kpi-icon"><i class="bi {{ kpi.icon }}"></i></div>
+        <div>
+          <div class="kpi-label">{{ kpi.label }}</div>
+          <div class="kpi-value">
+            {% if kpi.display is defined %}
+              {{ kpi.display }}
+            {% elif kpi.kind == 'money' %}
+              {{ kpi.value|mad }}
+            {% elif kpi.kind == 'percent' %}
+              {{ kpi.value|percent }}
+            {% else %}
+              {{ kpi.value|number }}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mt-3">
+  <div class="col-12 col-xl-5">
+    <div class="panel">
+      <h2><i class="bi bi-clock-history me-2"></i>Dernier traitement</h2>
+      <dl class="row mb-0 info-list">
+        <dt class="col-sm-5">Date du dernier run</dt>
+        <dd class="col-sm-7">{{ last_run_date.strftime("%Y-%m-%d %H:%M") if last_run_date else "Non disponible" }}</dd>
+        <dt class="col-sm-5">Statut global</dt>
+        <dd class="col-sm-7">
+          <span class="badge text-bg-{{ run_status.class }}">{{ run_status.label }}</span>
+        </dd>
+        <dt class="col-sm-5">Rapport Excel</dt>
+        <dd class="col-sm-7">
+          {% if last_report %}
+            <span class="text-success"><i class="bi bi-check-circle me-1"></i>Disponible</span>
+          {% else %}
+            <span class="text-muted">Non disponible</span>
+          {% endif %}
+        </dd>
+        <dt class="col-sm-5">Période</dt>
+        <dd class="col-sm-7">{{ summary.get("reconciliation_period", "Non renseignée") }}</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="col-12 col-xl-7">
+    <div class="panel">
+      <h2><i class="bi bi-lightning-charge me-2"></i>Actions rapides</h2>
+      <div class="quick-actions">
+        <a href="{{ url_for('upload') }}" class="btn btn-outline-primary"><i class="bi bi-cloud-arrow-up me-1"></i>Déposer des fichiers</a>
+        <a href="{{ url_for('run') }}" class="btn btn-primary"><i class="bi bi-play-circle me-1"></i>Lancer un traitement</a>
+        <a href="{{ url_for('details') }}" class="btn btn-outline-danger"><i class="bi bi-exclamation-diamond me-1"></i>Consulter les écarts</a>
+        {% if last_report %}
+          <a href="{{ url_for('download_file', category='reports', filename=last_report.name) }}" class="btn btn-outline-primary"><i class="bi bi-download me-1"></i>Télécharger le dernier rapport</a>
+        {% else %}
+          <a href="{{ url_for('downloads') }}" class="btn btn-outline-secondary disabled" aria-disabled="true"><i class="bi bi-download me-1"></i>Télécharger le dernier rapport</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

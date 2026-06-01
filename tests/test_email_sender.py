@@ -25,9 +25,11 @@ def test_send_report_email_dry_run_logs_planned_content(tmp_path, caplog) -> Non
         "out_of_scope_rci": 2,
         "matched_invoices": 7,
         "unmatched_erp": 2,
+        "rci_out_of_period": 4,
         "gaps_detected": 3,
         "duplicates": 1,
         "total_impacted_amount": 125.5,
+        "no_rci_flux_in_period_alert": True,
     }
 
     with caplog.at_level(logging.INFO):
@@ -38,8 +40,10 @@ def test_send_report_email_dry_run_logs_planned_content(tmp_path, caplog) -> Non
     assert "Factures analysées : 10" in caplog.text
     assert "Factures dans le périmètre RCI : 8" in caplog.text
     assert "Factures hors périmètre RCI : 2" in caplog.text
+    assert "RCI hors période : 4" in caplog.text
     assert "Écarts détectés : 3" in caplog.text
     assert "Montant impacté total : 125.50 MAD" in caplog.text
+    assert "aucun flux RCI dans la période de rapprochement" in caplog.text
 
 
 def test_send_report_returns_disabled_when_email_is_off(tmp_path) -> None:

@@ -47,6 +47,7 @@ RECONCILIATION_COLUMNS = [
     "source_erp",
     "source_rci",
     "source_pdf",
+    "commentaire_audit",
 ]
 
 STATUS_ACTIONS = {
@@ -59,6 +60,7 @@ STATUS_ACTIONS = {
     "ANOMALIE_DATE": "Verifier date facture/date echeance",
     "DOUBLON": "Verifier duplication de facture",
     "RCI_SEULEMENT": "Verifier origine cote RCI ou historique ERP",
+    "RCI_HORS_PERIODE": "Aucune action: flux RCI hors periode de rapprochement",
     "HORS_SCOPE_RCI": "Aucune action: facture ERP hors perimetre de couverture RCI",
 }
 
@@ -66,6 +68,7 @@ STATUS_PRIORITIES = {
     "OK": "BASSE",
     "ANOMALIE_DATE": "MOYENNE",
     "RCI_SEULEMENT": "MOYENNE",
+    "RCI_HORS_PERIODE": "BASSE",
     "MANQUANTE_RCI": "HAUTE",
     "ANOMALIE_MONTANT": "HAUTE",
     "DOUBLON": "HAUTE",
@@ -79,22 +82,30 @@ def reconcile(
     pdf_records: Any,
     missing_required: dict[str, int] | None = None,
     amount_tolerance: float = DEFAULT_AMOUNT_TOLERANCE_MAD,
+    rci_out_of_period_records: Any | None = None,
+    pdf_out_of_period_records: Any | None = None,
 ) -> dict[str, Any]:
     missing_required = missing_required or {}
     erp_frame = _to_dataframe(erp_records)
     rci_frame = _to_dataframe(rci_records)
     pdf_frame = _to_dataframe(pdf_records)
+    rci_out_of_period_frame = _to_dataframe(rci_out_of_period_records)
+    pdf_out_of_period_frame = _to_dataframe(pdf_out_of_period_records)
 
     reconciliation = reconcile_dataframes(
         erp_frame,
         rci_frame,
         pdf_frame,
         amount_tolerance=amount_tolerance,
+        rci_out_of_period_records=rci_out_of_period_frame,
+        pdf_out_of_period_records=pdf_out_of_period_frame,
     )
 
     erp_rows = _to_records(erp_frame, "erp")
     rci_rows = _to_records(rci_frame, "rci")
     pdf_rows = _to_records(pdf_frame, "pdf")
+    rci_out_of_period_rows = _to_records(rci_out_of_period_frame, "rci")
+    pdf_out_of_period_rows = _to_records(pdf_out_of_period_frame, "pdf")
 
     blocking_anomalies = _missing_required_anomalies(missing_required)
     reconciliation_anomalies = _reconciliation_anomalies(reconciliation)
@@ -138,6 +149,7 @@ def reconcile(
             "rci_rows": len(rci_rows),
             "pdf_files": _count_distinct_files(pdf_rows),
             "pdf_rows": len(pdf_rows),
+            "rci_out_of_period": status_counts.get("RCI_HORS_PERIODE", 0),
             "reconciled_invoices": len(reconciliation),
             "matched_invoices": status_counts.get("OK", 0),
             "unmatched_erp": status_counts.get("MANQUANTE_RCI", 0),
@@ -158,7 +170,7 @@ def reconcile(
             "amount_tolerance_mad": amount_tolerance,
             **{f"status_{status.lower()}": count for status, count in status_counts.items()},
         },
-        "source_files": [*erp_rows, *rci_rows, *pdf_rows],
+        "source_files": [*erp_rows, *rci_rows, *pdf_rows, *rci_out_of_period_rows, *pdf_out_of_period_rows],
         "reconciliation": _dataframe_records(reconciliation),
         "anomalies": anomalies,
         "note": (
@@ -173,6 +185,8 @@ def reconcile_dataframes(
     rci_records: Any,
     pdf_records: Any,
     amount_tolerance: float = DEFAULT_AMOUNT_TOLERANCE_MAD,
+    rci_out_of_period_records: Any | None = None,
+    pdf_out_of_period_records: Any | None = None,
 ) -> "pd.DataFrame":
     pandas = _require_pandas()
     erp = _aggregate_erp(_to_dataframe(erp_records))
@@ -180,7 +194,9 @@ def reconcile_dataframes(
     pdf = _aggregate_pdf(_to_dataframe(pdf_records))
     consolidated_rci = _consolidate_rci_pdf(rci, pdf)
 
-    if erp.empty and consolidated_rci.empty:
+    rci_out_frame = _to_dataframe(rci_out_of_period_records)
+    pdf_out_frame = _to_dataframe(pdf_out_of_period_records)
+    if erp.empty and consolidated_rci.empty and rci_out_frame.empty and pdf_out_frame.empty:
         return pandas.DataFrame(columns=RECONCILIATION_COLUMNS)
 
     merged = erp.merge(consolidated_rci, on="invoice_number", how="outer")
@@ -188,8 +204,58 @@ def reconcile_dataframes(
     for _, row in merged.iterrows():
         records.append(_build_reconciliation_row(row, amount_tolerance))
 
-    result = pandas.DataFrame(records).reindex(columns=RECONCILIATION_COLUMNS)
+    out_of_period_rows = _build_rci_out_of_period_rows(
+        rci_out_frame,
+        pdf_out_frame,
+    )
+    result = pandas.DataFrame([*records, *out_of_period_rows]).reindex(columns=RECONCILIATION_COLUMNS)
     return result.sort_values(["status", "invoice_number"], kind="stable").reset_index(drop=True)
+
+
+def _build_rci_out_of_period_rows(rci_records: Any, pdf_records: Any) -> list[dict[str, Any]]:
+    rci = _aggregate_rci(_to_dataframe(rci_records))
+    pdf = _aggregate_pdf(_to_dataframe(pdf_records))
+    consolidated = _consolidate_rci_pdf(rci, pdf)
+    if consolidated.empty:
+        return []
+
+    rows = []
+    for _, row in consolidated.iterrows():
+        invoice_number = row.get("invoice_number")
+        if _is_missing(invoice_number):
+            continue
+        amount_rci = _clean_number(row.get("amount_rci"))
+        amount_pdf = _clean_number(row.get("amount_pdf"))
+        rows.append(
+            {
+                "invoice_number": invoice_number,
+                "document_type": _first_value(
+                    row.get("document_type_consolidated"),
+                    detect_document_type(invoice_number),
+                ),
+                "customer_code": None,
+                "customer_name": None,
+                "is_rci_covered": None,
+                "amount_erp": None,
+                "amount_rci": amount_rci,
+                "amount_pdf": amount_pdf,
+                "amount_gap": None,
+                "montant_impacte": 0.0,
+                "erp_date": None,
+                "rci_date": _none_if_missing(row.get("rci_date")),
+                "pdf_invoice_date": _none_if_missing(row.get("pdf_invoice_date")),
+                "due_date": _none_if_missing(row.get("due_date")),
+                "origin": _none_if_missing(row.get("origin")),
+                "status": "RCI_HORS_PERIODE",
+                "priority": STATUS_PRIORITIES["RCI_HORS_PERIODE"],
+                "action_recommandee": STATUS_ACTIONS["RCI_HORS_PERIODE"],
+                "source_erp": None,
+                "source_rci": _none_if_missing(row.get("source_rci")),
+                "source_pdf": _none_if_missing(row.get("source_pdf")),
+                "commentaire_audit": "Flux RCI/PDF hors période de rapprochement",
+            }
+        )
+    return rows
 
 
 def _aggregate_erp(frame: "pd.DataFrame") -> "pd.DataFrame":
@@ -462,6 +528,7 @@ def _build_reconciliation_row(row: Any, amount_tolerance: float) -> dict[str, An
         "source_erp": _none_if_missing(row.get("source_erp")),
         "source_rci": _none_if_missing(row.get("source_rci")),
         "source_pdf": _none_if_missing(row.get("source_pdf")),
+        "commentaire_audit": None,
     }
 
 
@@ -538,7 +605,7 @@ def _reconciliation_anomalies(reconciliation: "pd.DataFrame") -> list[dict[str, 
         return []
 
     anomalies = []
-    anomaly_statuses = reconciliation[~reconciliation["status"].isin({"OK", "HORS_SCOPE_RCI"})]
+    anomaly_statuses = reconciliation[~reconciliation["status"].isin({"OK", "HORS_SCOPE_RCI", "RCI_HORS_PERIODE"})]
     for record in anomaly_statuses.to_dict("records"):
         anomalies.append(
             {
@@ -581,7 +648,7 @@ def _covered_invoice_count(reconciliation: "pd.DataFrame") -> int:
         return 0
     covered = reconciliation[
         (reconciliation["is_rci_covered"] == True)  # noqa: E712 - pandas boolean mask.
-        & (reconciliation["status"] != "RCI_SEULEMENT")
+        & (~reconciliation["status"].isin({"RCI_SEULEMENT", "RCI_HORS_PERIODE"}))
     ]
     return int(len(covered))
 
@@ -610,7 +677,7 @@ def _impacted_amount(
         return _abs_or_zero(amount_erp)
     if status == "RCI_SEULEMENT":
         return _abs_or_zero(amount_pdf if amount_pdf is not None else amount_rci)
-    if status == "HORS_SCOPE_RCI":
+    if status in {"HORS_SCOPE_RCI", "RCI_HORS_PERIODE"}:
         return 0.0
     if status == "DOUBLON":
         return _abs_or_zero(_first_value(amount_erp, amount_pdf, amount_rci))

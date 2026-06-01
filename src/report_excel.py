@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from src.audit import enrich_report_with_audits
+except ModuleNotFoundError:  # pragma: no cover - used when running python src/main.py.
+    from audit import enrich_report_with_audits
+
+try:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
@@ -39,6 +44,7 @@ RECONCILIATION_COLUMNS = [
     "source_erp",
     "source_rci",
     "source_pdf",
+    "commentaire_audit",
 ]
 
 RECONCILIATION_HEADERS = {
@@ -63,6 +69,7 @@ RECONCILIATION_HEADERS = {
     "source_erp": "Source ERP",
     "source_rci": "Source RCI",
     "source_pdf": "Source PDF",
+    "commentaire_audit": "Commentaire audit",
 }
 
 STATUS_FILLS = {
@@ -72,6 +79,7 @@ STATUS_FILLS = {
     "ANOMALIE_DATE": "FFC7CE",
     "DOUBLON": "E4DFEC",
     "RCI_SEULEMENT": "D9EAF7",
+    "RCI_HORS_PERIODE": "DDEBF7",
     "HORS_SCOPE_RCI": "E7E6E6",
 }
 
@@ -82,6 +90,7 @@ STATUS_FONT_COLORS = {
     "ANOMALIE_DATE": "9C0006",
     "DOUBLON": "5F497A",
     "RCI_SEULEMENT": "1F4E78",
+    "RCI_HORS_PERIODE": "1F4E78",
     "HORS_SCOPE_RCI": "666666",
 }
 
@@ -91,13 +100,68 @@ SUMMARY_MONEY_LABELS = {
     "Montant impacté total",
     "Montant manquant RCI",
 }
+SUMMARY_PERCENT_LABELS = {
+    "Taux de rapprochement",
+    "Pourcentage hors scope RCI",
+}
 TABLE_STYLE = "TableStyleMedium2"
 MAX_TABLE_ROWS = 5000
 MAX_AUTOFIT_ROWS = 1000
 
+AUDIT_DATES_COLUMNS = [
+    "erp_date",
+    "nombre_total_factures_erp",
+    "nombre_ok",
+    "nombre_manquante_rci",
+    "nombre_hors_scope_rci",
+    "montant_manquant_rci",
+    "taux_rapprochement_date",
+    "rci_count",
+    "rci_hors_periode_count",
+]
+
+AUDIT_MISSING_RCI_COLUMNS = [
+    "invoice_number",
+    "erp_date",
+    "customer_name",
+    "customer_code",
+    "amount_erp",
+    "is_rci_covered",
+    "status",
+    "montant_impacte",
+    "source_erp",
+    "date_in_filter",
+    "commentaire_audit",
+]
+
+RCI_OUT_OF_PERIOD_COLUMNS = [
+    "invoice_number",
+    "document_type",
+    "rci_date",
+    "amount_rci",
+    "source_rci",
+    "status",
+    "montant_impacte",
+    "commentaire_audit",
+]
+
+AUDIT_OUT_OF_SCOPE_COLUMNS = [
+    "invoice_number",
+    "erp_date",
+    "customer_name",
+    "normalized_customer_name",
+    "amount_erp",
+    "status",
+    "closest_reference_name",
+    "closest_reference_similarity",
+    "commentaire_audit",
+]
+
 
 def write_excel_report(report: dict[str, Any], output_dir: Path, run_id: str) -> Path:
     workbook_class = _require_openpyxl()
+    if not report.get("audits"):
+        report = enrich_report_with_audits(report, log=False)
     output_dir.mkdir(parents=True, exist_ok=True)
     generated_at = _report_datetime(report, run_id)
     workbook_path = output_dir / f"Rapport_Reconciliation_RCI_{generated_at:%Y-%m-%d_%H%M}.xlsx"
@@ -133,11 +197,36 @@ def write_excel_report(report: dict[str, Any], output_dir: Path, run_id: str) ->
         _filter_status(reconciliation_rows, {"RCI_SEULEMENT"}),
         "TableRCISeulement",
     )
+    _write_rows_sheet(
+        workbook,
+        "RCI hors période",
+        _dict_rows(_filter_status(reconciliation_rows, {"RCI_HORS_PERIODE"}), RCI_OUT_OF_PERIOD_COLUMNS),
+        table_name="TableRCIHorsPeriode",
+    )
     _write_reconciliation_sheet(
         workbook,
         "Hors scope RCI",
         _filter_status(reconciliation_rows, {"HORS_SCOPE_RCI"}),
         "TableHorsScopeRCI",
+    )
+    audits = report.get("audits", {})
+    _write_rows_sheet(
+        workbook,
+        "Audit dates",
+        _dict_rows(audits.get("dates", []), AUDIT_DATES_COLUMNS),
+        table_name="TableAuditDates",
+    )
+    _write_rows_sheet(
+        workbook,
+        "Audit manquantes RCI",
+        _dict_rows(audits.get("missing_rci", []), AUDIT_MISSING_RCI_COLUMNS),
+        table_name="TableAuditManquantesRCI",
+    )
+    _write_rows_sheet(
+        workbook,
+        "Audit hors scope RCI",
+        _dict_rows(audits.get("out_of_scope_rci", []), AUDIT_OUT_OF_SCOPE_COLUMNS),
+        table_name="TableAuditHorsScopeRCI",
     )
     _write_rows_sheet(
         workbook,
@@ -162,6 +251,7 @@ def _summary_rows(report: dict[str, Any], generated_at: datetime) -> list[list[A
     date_anomalies = status_counts.get("ANOMALIE_DATE", int(summary.get("date_anomalies", 0) or 0))
     duplicates = status_counts.get("DOUBLON", int(summary.get("duplicates", 0) or 0))
     rci_only = status_counts.get("RCI_SEULEMENT", int(summary.get("unmatched_rci", 0) or 0))
+    rci_out_of_period = status_counts.get("RCI_HORS_PERIODE", int(summary.get("rci_out_of_period", 0) or 0))
     out_of_scope = status_counts.get("HORS_SCOPE_RCI", int(summary.get("out_of_scope_rci", 0) or 0))
     analyzed_total = int(summary.get("reconciled_invoices", len(reconciliation)) or 0)
     total_controlled = float(summary.get("total_controlled_amount", 0) or _sum_amounts(reconciliation, "amount_erp"))
@@ -182,6 +272,10 @@ def _summary_rows(report: dict[str, Any], generated_at: datetime) -> list[list[A
         ["ERP avant filtre", int(summary.get("erp_rows_before_date_filter", erp_total) or 0)],
         ["ERP après filtre", int(summary.get("erp_rows_after_date_filter", erp_total) or 0)],
         ["Lignes ERP exclues par date", int(summary.get("erp_rows_excluded_by_date", 0) or 0)],
+        ["RCI avant filtre date", int(summary.get("rci_rows_before_date_filter", summary.get("rci_rows", 0)) or 0)],
+        ["RCI après filtre date", int(summary.get("rci_rows_after_date_filter", summary.get("rci_rows", 0)) or 0)],
+        ["RCI exclu par période", int(summary.get("rci_rows_excluded_by_date", 0) or 0)],
+        ["Alerte aucun flux RCI dans la période", _yes_no(summary.get("no_rci_flux_in_period_alert", False))],
         ["Factures analysées", analyzed_total],
         ["Factures dans le périmètre RCI", erp_matchable],
         ["Factures hors périmètre RCI", out_of_scope],
@@ -189,11 +283,17 @@ def _summary_rows(report: dict[str, Any], generated_at: datetime) -> list[list[A
         ["Factures manquantes RCI", missing_count],
         ["Écarts détectés", gaps_detected],
         ["Montant impacté total", total_impacted],
+        ["Alerte taux faible", _yes_no(summary.get("low_matching_rate_alert", matching_rate < 0.70 if erp_matchable else False))],
+        ["Nombre MANQUANTE_RCI hors période", int(summary.get("missing_rci_out_of_period", 0) or 0)],
+        ["Alerte MANQUANTE_RCI hors période", _yes_no(summary.get("missing_rci_out_of_period_alert", False))],
+        ["Pourcentage hors scope RCI", float(summary.get("out_of_scope_rci_percent", (out_of_scope / analyzed_total if analyzed_total else 0)) or 0)],
+        ["Alerte hors scope RCI élevé", _yes_no(summary.get("out_of_scope_rate_alert", False))],
         ["Nombre total RCI/PDF", rci_pdf_total],
         ["Nombre ANOMALIE_MONTANT", amount_anomalies],
         ["Nombre ANOMALIE_DATE", date_anomalies],
         ["Nombre DOUBLON", duplicates],
         ["Nombre RCI_SEULEMENT", rci_only],
+        ["RCI hors période", rci_out_of_period],
         ["Nombre factures couvertes RCI", int(summary.get("rci_covered_invoices", 0) or 0)],
         ["Montant total contrôlé", total_controlled],
         ["Montant manquant RCI", missing_rci_amount],
@@ -226,6 +326,7 @@ def _dealer_summary_rows(records: list[dict[str, Any]]) -> list[list[Any]]:
         "ANOMALIE_DATE",
         "DOUBLON",
         "RCI_SEULEMENT",
+        "RCI_HORS_PERIODE",
         "HORS_SCOPE_RCI",
         "Montant ERP",
         "Montant RCI",
@@ -247,6 +348,7 @@ def _dealer_summary_rows(records: list[dict[str, Any]]) -> list[list[Any]]:
                 "ANOMALIE_DATE": 0,
                 "DOUBLON": 0,
                 "RCI_SEULEMENT": 0,
+                "RCI_HORS_PERIODE": 0,
                 "HORS_SCOPE_RCI": 0,
                 "amount_erp": 0.0,
                 "amount_rci": 0.0,
@@ -278,6 +380,7 @@ def _dealer_summary_rows(records: list[dict[str, Any]]) -> list[list[Any]]:
                 values["ANOMALIE_DATE"],
                 values["DOUBLON"],
                 values["RCI_SEULEMENT"],
+                values["RCI_HORS_PERIODE"],
                 values["HORS_SCOPE_RCI"],
                 round(values["amount_erp"], 2),
                 round(values["amount_rci"], 2),
@@ -286,6 +389,13 @@ def _dealer_summary_rows(records: list[dict[str, Any]]) -> list[list[Any]]:
                 round(values["montant_impacte"], 2),
             ]
         )
+    return rows
+
+
+def _dict_rows(records: list[dict[str, Any]], columns: list[str]) -> list[list[Any]]:
+    rows = [columns]
+    for record in records:
+        rows.append([_clean_cell_value(record.get(column)) for column in columns])
     return rows
 
 
@@ -332,14 +442,14 @@ def _style_sheet(worksheet: Any, table_name: str) -> None:
         )
         worksheet.add_table(table)
 
-    _format_summary_sheet(worksheet)
+    _format_special_sheet(worksheet)
     _auto_fit_columns(worksheet)
 
 
-def _format_summary_sheet(worksheet: Any) -> None:
+def _format_special_sheet(worksheet: Any) -> None:
     if worksheet.title != "Synthèse":
         if worksheet.title == "Synthèse par concessionnaire":
-            for column_index in range(11, 16):
+            for column_index in range(12, 17):
                 for cell in worksheet.iter_cols(
                     min_col=column_index,
                     max_col=column_index,
@@ -348,6 +458,16 @@ def _format_summary_sheet(worksheet: Any) -> None:
                 ):
                     for item in cell:
                         item.number_format = '#,##0.00'
+        elif worksheet.title == "Audit dates":
+            _format_columns_by_index(worksheet, {6}, '#,##0.00')
+            _format_columns_by_index(worksheet, {7}, '0.00%')
+        elif worksheet.title == "Audit manquantes RCI":
+            _format_columns_by_index(worksheet, {5, 8}, '#,##0.00')
+        elif worksheet.title == "Audit hors scope RCI":
+            _format_columns_by_index(worksheet, {5}, '#,##0.00')
+            _format_columns_by_index(worksheet, {8}, '0.00%')
+        elif worksheet.title == "RCI hors période":
+            _format_columns_by_index(worksheet, {4, 7}, '#,##0.00')
         return
 
     for row_index in range(2, worksheet.max_row + 1):
@@ -355,11 +475,19 @@ def _format_summary_sheet(worksheet: Any) -> None:
         value_cell = worksheet.cell(row=row_index, column=2)
         if label in SUMMARY_MONEY_LABELS:
             value_cell.number_format = '#,##0.00'
-        elif label == "Taux de rapprochement":
+        elif label in SUMMARY_PERCENT_LABELS:
             value_cell.number_format = '0.00%'
         elif isinstance(value_cell.value, int):
             value_cell.number_format = '#,##0'
         worksheet.cell(row=row_index, column=1).font = Font(bold=True)
+
+
+def _format_columns_by_index(worksheet: Any, columns: set[int], number_format: str) -> None:
+    for column_index in columns:
+        if column_index > worksheet.max_column:
+            continue
+        for row_index in range(2, worksheet.max_row + 1):
+            worksheet.cell(row=row_index, column=column_index).number_format = number_format
 
 
 def _format_money_columns(worksheet: Any, columns: list[str]) -> None:
@@ -463,6 +591,10 @@ def _safe_table_name(value: str) -> str:
     if cleaned[0].isdigit():
         return f"Table{cleaned}"
     return cleaned[:254]
+
+
+def _yes_no(value: Any) -> str:
+    return "Oui" if bool(value) else "Non"
 
 
 def _require_openpyxl() -> Any:

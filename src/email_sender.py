@@ -171,8 +171,15 @@ def _build_email_body(summary: dict[str, Any]) -> str:
     out_of_scope = _summary_int(summary, "out_of_scope_rci", "status_hors_scope_rci")
     ok = _summary_int(summary, "matched_invoices", "status_ok")
     missing = _summary_int(summary, "unmatched_erp", "status_manquante_rci")
+    rci_out_of_period = _summary_int(summary, "rci_out_of_period", "status_rci_hors_periode")
     gaps_detected = _summary_int(summary, "gaps_detected", "anomalies")
     total_impacted = _summary_float(summary, "total_impacted_amount", "total_amount_gap")
+    no_rci_alert = _summary_bool(summary, "no_rci_flux_in_period_alert")
+    no_rci_alert_text = (
+        "Alerte : aucun flux RCI dans la période de rapprochement.\n\n"
+        if no_rci_alert
+        else ""
+    )
 
     if in_scope == 0:
         in_scope = (
@@ -192,8 +199,10 @@ def _build_email_body(summary: dict[str, Any]) -> str:
         f"- Factures hors périmètre RCI : {out_of_scope}\n"
         f"- Factures OK : {ok}\n"
         f"- Factures manquantes RCI : {missing}\n"
+        f"- RCI hors période : {rci_out_of_period}\n"
         f"- Écarts détectés : {gaps_detected}\n"
         f"- Montant impacté total : {total_impacted:,.2f} MAD\n\n"
+        f"{no_rci_alert_text}"
         "Le rapport détaillé est disponible en pièce jointe.\n\n"
         "Cordialement,\n"
         "AutoRCI Control"
@@ -237,6 +246,17 @@ def _summary_float(summary: dict[str, Any], *keys: str) -> float:
         except (TypeError, ValueError):
             continue
     return 0.0
+
+
+def _summary_bool(summary: dict[str, Any], *keys: str) -> bool:
+    for key in keys:
+        value = summary.get(key)
+        if isinstance(value, bool):
+            return value
+        if value is None or value == "":
+            continue
+        return str(value).strip().lower() in {"1", "true", "yes", "y", "on", "oui"}
+    return False
 
 
 def _find_report_attachment(artifacts: list[Path]) -> Path | None:

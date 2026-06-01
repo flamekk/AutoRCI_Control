@@ -1,0 +1,32 @@
+<div class="panel">
+  {% if rows %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover table-sm align-middle data-table">
+        <thead>
+          <tr>
+            {% for column in columns %}
+              <th>{{ column }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              {% for column in columns %}
+                {% if column == "status" %}
+                  <td><span class="badge status-badge text-bg-{{ status_badge_class(row.get(column)) }}">{{ row.get(column, "") }}</span></td>
+                {% elif column in ["amount_erp", "amount_rci", "amount_pdf", "amount_gap", "montant_impacte"] %}
+                  <td class="text-end">{{ row.get(column)|mad }}</td>
+                {% else %}
+                  <td>{{ row.get(column, "") }}</td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">Aucune ligne a afficher.</div>
+  {% endif %}
+</div>
