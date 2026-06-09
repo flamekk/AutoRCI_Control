@@ -1,0 +1,2 @@
+﻿processing_date;processing_run_id;invoice_number;document_type;customer_code;customer_name;is_rci_covered;amount_erp;amount_rci;amount_pdf;amount_gap;montant_impacte;erp_date;pdf_invoice_date;due_date;origin;status;priority;action_recommandee
+2026-05-20;20260520_142811;VF385380;FACTURE;;;;100;;;0;;;;;;OK;BASSE;Aucune action

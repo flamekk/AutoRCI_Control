@@ -42,7 +42,7 @@ def _report(records: list[dict[str, object]]) -> dict[str, object]:
             "reconciliation_end_date": "2026-05-05",
         },
         "reconciliation": records,
-    }
+    }  
 
 
 def test_audit_dates_calcule_ok_manquante_hors_scope_par_date() -> None:

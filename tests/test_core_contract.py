@@ -96,4 +96,4 @@ def test_duplicate_detection():
 
     assert len(result) == 1
     assert result.loc[0, "status"] == "DOUBLON"
-    assert "duplication" in result.loc[0, "action_recommandee"].lower()
+    assert "doublons" in result.loc[0, "action_recommandee"].lower()

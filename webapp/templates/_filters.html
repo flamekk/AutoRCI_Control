@@ -1,4 +1,4 @@
-<div class="panel mb-3">
+<div class="panel filter-panel mb-3">
   <form method="get" class="row g-3 align-items-end">
     <div class="col-12 col-md-3">
       <label class="form-label" for="status">Statut</label>
@@ -19,7 +19,7 @@
       </datalist>
     </div>
     <div class="col-12 col-md-2">
-      <label class="form-label" for="date_from">Date debut</label>
+      <label class="form-label" for="date_from">Date début</label>
       <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from }}">
     </div>
     <div class="col-12 col-md-2">
@@ -27,7 +27,7 @@
       <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filters.date_to }}">
     </div>
     <div class="col-12 col-md-2 d-grid">
-      <button class="btn btn-primary" type="submit">Filtrer</button>
+      <button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-1"></i>Filtrer</button>
     </div>
   </form>
 </div>

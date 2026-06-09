@@ -20,6 +20,11 @@ except ModuleNotFoundError:  # pragma: no cover - useful when imported as src.re
         parse_french_amount,
     )
 
+try:
+    from src.action_plan import recommended_action, severity_counts, severity_for_status
+except ModuleNotFoundError:  # pragma: no cover - used when running python src/main.py.
+    from action_plan import recommended_action, severity_counts, severity_for_status
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,26 +48,14 @@ RECONCILIATION_COLUMNS = [
     "origin",
     "status",
     "priority",
+    "severity",
+    "included_in_corrective_batch",
     "action_recommandee",
     "source_erp",
     "source_rci",
     "source_pdf",
     "commentaire_audit",
 ]
-
-STATUS_ACTIONS = {
-    "OK": "Aucune action",
-    "MANQUANTE_RCI": (
-        "Verifier l'integration dans le prochain flux ou preparer un renvoi "
-        "(ecart de transmission, d'integration ou de reception du flux)"
-    ),
-    "ANOMALIE_MONTANT": "Controler montant ERP vs montant finance RCI",
-    "ANOMALIE_DATE": "Verifier date facture/date echeance",
-    "DOUBLON": "Verifier duplication de facture",
-    "RCI_SEULEMENT": "Verifier origine cote RCI ou historique ERP",
-    "RCI_HORS_PERIODE": "Aucune action: flux RCI hors periode de rapprochement",
-    "HORS_SCOPE_RCI": "Aucune action: facture ERP hors perimetre de couverture RCI",
-}
 
 STATUS_PRIORITIES = {
     "OK": "BASSE",
@@ -73,6 +66,15 @@ STATUS_PRIORITIES = {
     "ANOMALIE_MONTANT": "HAUTE",
     "DOUBLON": "HAUTE",
     "HORS_SCOPE_RCI": "BASSE",
+}
+
+ERP_ANALYZED_STATUSES = {
+    "OK",
+    "MANQUANTE_RCI",
+    "HORS_SCOPE_RCI",
+    "ANOMALIE_MONTANT",
+    "ANOMALIE_DATE",
+    "DOUBLON",
 }
 
 
@@ -112,6 +114,8 @@ def reconcile(
     anomalies = [*blocking_anomalies, *reconciliation_anomalies]
 
     status_counts = _status_counts(reconciliation)
+    severity_count_values = severity_counts(_dataframe_records(reconciliation))
+    erp_analyzed_invoices = _erp_analyzed_count(status_counts)
     total_controlled_amount = _sum_abs_column(reconciliation, "amount_erp")
     total_impacted_amount = _sum_abs_column(reconciliation, "montant_impacte")
     missing_rci_amount = _sum_abs_column(
@@ -138,6 +142,9 @@ def reconcile(
     )
     for status, count in status_counts.items():
         LOGGER.info("Rapprochement %s: %s ligne(s)", status, count)
+    for severity, count in severity_count_values.items():
+        if count:
+            LOGGER.info("Priorisation %s: %s ligne(s)", severity, count)
 
     return {
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -150,7 +157,9 @@ def reconcile(
             "pdf_files": _count_distinct_files(pdf_rows),
             "pdf_rows": len(pdf_rows),
             "rci_out_of_period": status_counts.get("RCI_HORS_PERIODE", 0),
-            "reconciled_invoices": len(reconciliation),
+            "total_rci_pdf_out_of_period": status_counts.get("RCI_HORS_PERIODE", 0),
+            "erp_analyzed_invoices": erp_analyzed_invoices,
+            "reconciled_invoices": erp_analyzed_invoices,
             "matched_invoices": status_counts.get("OK", 0),
             "unmatched_erp": status_counts.get("MANQUANTE_RCI", 0),
             "unmatched_rci": status_counts.get("RCI_SEULEMENT", 0),
@@ -159,6 +168,16 @@ def reconcile(
             "amount_anomalies": status_counts.get("ANOMALIE_MONTANT", 0),
             "date_anomalies": status_counts.get("ANOMALIE_DATE", 0),
             "duplicates": status_counts.get("DOUBLON", 0),
+            "severity_critique": severity_count_values.get("CRITIQUE", 0),
+            "severity_elevee": severity_count_values.get("ELEVEE", 0),
+            "severity_moyenne": severity_count_values.get("MOYENNE", 0),
+            "severity_a_verifier": severity_count_values.get("A_VERIFIER", 0),
+            "severity_information": severity_count_values.get("INFORMATION", 0),
+            "critical_gaps": severity_count_values.get("CRITIQUE", 0),
+            "high_gaps": severity_count_values.get("ELEVEE", 0),
+            "medium_gaps": severity_count_values.get("MOYENNE", 0),
+            "reference_review_lines": severity_count_values.get("A_VERIFIER", 0),
+            "information_lines": severity_count_values.get("INFORMATION", 0),
             "total_controlled_amount": total_controlled_amount,
             "total_amount_gap": total_impacted_amount,
             "total_impacted_amount": total_impacted_amount,
@@ -226,6 +245,8 @@ def _build_rci_out_of_period_rows(rci_records: Any, pdf_records: Any) -> list[di
             continue
         amount_rci = _clean_number(row.get("amount_rci"))
         amount_pdf = _clean_number(row.get("amount_pdf"))
+        status = "RCI_HORS_PERIODE"
+        impacted_amount = 0.0
         rows.append(
             {
                 "invoice_number": invoice_number,
@@ -240,15 +261,17 @@ def _build_rci_out_of_period_rows(rci_records: Any, pdf_records: Any) -> list[di
                 "amount_rci": amount_rci,
                 "amount_pdf": amount_pdf,
                 "amount_gap": None,
-                "montant_impacte": 0.0,
+                "montant_impacte": impacted_amount,
                 "erp_date": None,
                 "rci_date": _none_if_missing(row.get("rci_date")),
                 "pdf_invoice_date": _none_if_missing(row.get("pdf_invoice_date")),
                 "due_date": _none_if_missing(row.get("due_date")),
                 "origin": _none_if_missing(row.get("origin")),
-                "status": "RCI_HORS_PERIODE",
+                "status": status,
                 "priority": STATUS_PRIORITIES["RCI_HORS_PERIODE"],
-                "action_recommandee": STATUS_ACTIONS["RCI_HORS_PERIODE"],
+                "severity": severity_for_status(status, impacted_amount),
+                "included_in_corrective_batch": False,
+                "action_recommandee": recommended_action(status),
                 "source_erp": None,
                 "source_rci": _none_if_missing(row.get("source_rci")),
                 "source_pdf": _none_if_missing(row.get("source_pdf")),
@@ -506,6 +529,8 @@ def _build_reconciliation_row(row: Any, amount_tolerance: float) -> dict[str, An
         amount_tolerance=amount_tolerance,
     )
 
+    impacted_amount = _impacted_amount(status, amount_erp, amount_rci, amount_pdf, amount_gap)
+
     return {
         "invoice_number": row.get("invoice_number"),
         "document_type": document_type,
@@ -516,7 +541,7 @@ def _build_reconciliation_row(row: Any, amount_tolerance: float) -> dict[str, An
         "amount_rci": amount_rci,
         "amount_pdf": amount_pdf,
         "amount_gap": amount_gap,
-        "montant_impacte": _impacted_amount(status, amount_erp, amount_rci, amount_pdf, amount_gap),
+        "montant_impacte": impacted_amount,
         "erp_date": _none_if_missing(row.get("erp_date")),
         "rci_date": _none_if_missing(row.get("rci_date")),
         "pdf_invoice_date": _none_if_missing(row.get("pdf_invoice_date")),
@@ -524,7 +549,9 @@ def _build_reconciliation_row(row: Any, amount_tolerance: float) -> dict[str, An
         "origin": _none_if_missing(row.get("origin")),
         "status": status,
         "priority": STATUS_PRIORITIES[status],
-        "action_recommandee": STATUS_ACTIONS[status],
+        "severity": severity_for_status(status, impacted_amount),
+        "included_in_corrective_batch": False,
+        "action_recommandee": recommended_action(status),
         "source_erp": _none_if_missing(row.get("source_erp")),
         "source_rci": _none_if_missing(row.get("source_rci")),
         "source_pdf": _none_if_missing(row.get("source_pdf")),
@@ -609,7 +636,8 @@ def _reconciliation_anomalies(reconciliation: "pd.DataFrame") -> list[dict[str, 
     for record in anomaly_statuses.to_dict("records"):
         anomalies.append(
             {
-                "severity": _severity_for_status(record["status"]),
+                "severity": record.get("severity")
+                or severity_for_status(record["status"], record.get("montant_impacte")),
                 "source_type": "reconciliation",
                 "invoice_number": record["invoice_number"],
                 "status": record["status"],
@@ -620,11 +648,7 @@ def _reconciliation_anomalies(reconciliation: "pd.DataFrame") -> list[dict[str, 
 
 
 def _severity_for_status(status: str) -> str:
-    if status in {"MANQUANTE_RCI", "ANOMALIE_MONTANT", "DOUBLON"}:
-        return "high"
-    if status in {"ANOMALIE_DATE", "RCI_SEULEMENT"}:
-        return "medium"
-    return "low"
+    return severity_for_status(status)
 
 
 def _status_counts(reconciliation: "pd.DataFrame") -> dict[str, int]:
@@ -641,6 +665,10 @@ def _erp_matchable_count(status_counts: dict[str, int]) -> int:
         status_counts.get(status, 0)
         for status in {"OK", "MANQUANTE_RCI", "ANOMALIE_MONTANT", "ANOMALIE_DATE", "DOUBLON"}
     )
+
+
+def _erp_analyzed_count(status_counts: dict[str, int]) -> int:
+    return sum(status_counts.get(status, 0) for status in ERP_ANALYZED_STATUSES)
 
 
 def _covered_invoice_count(reconciliation: "pd.DataFrame") -> int:

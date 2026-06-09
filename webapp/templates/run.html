@@ -4,8 +4,8 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Lancer le traitement</h1>
-    <p class="text-muted mb-0">Exécution contrôlée du pipeline AutoRCI.</p>
+    <h1>Lancer la réconciliation</h1>
+    <p class="text-muted mb-0">Paramétrez et exécutez le pipeline AutoRCI depuis une interface contrôlée.</p>
   </div>
 </div>
 
@@ -13,7 +13,7 @@
   <h2><i class="bi bi-sliders me-2"></i>Paramètres d’exécution</h2>
   <div class="alert alert-warning d-flex gap-2 align-items-start" role="alert">
     <i class="bi bi-shield-exclamation"></i>
-    <div>Par défaut, le mode dry-run est activé pour éviter l’envoi d’email ou l’archivage accidentel.</div>
+    <div>Par défaut, le mode dry-run est recommandé pour éviter l’envoi d’email ou l’archivage accidentel.</div>
   </div>
   <form method="post" id="runForm">
     <div class="row g-3">
@@ -31,26 +31,28 @@
       </div>
     </div>
 
-    <div class="row g-3 mt-2">
+    <div class="option-grid mt-3">
       {% for field, label in [
         ("dry_run", "Dry-run"),
+        ("no_archive", "Désactiver archivage"),
         ("ignore_pdf", "Ignorer PDF"),
         ("no_date_filter", "Désactiver filtre date"),
         ("debug_reference", "Debug référentiel")
       ] %}
-        <div class="col-12 col-sm-6 col-lg-3">
-          <div class="form-check form-switch">
+        <div class="option-card">
+          <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" role="switch" id="{{ field }}" name="{{ field }}" {% if form_data[field] %}checked{% endif %}>
-            <label class="form-check-label" for="{{ field }}">{{ label }}</label>
+            <label class="form-check-label fw-semibold" for="{{ field }}">{{ label }}</label>
           </div>
         </div>
       {% endfor %}
     </div>
 
-    <div class="mt-4 d-flex align-items-center gap-3">
+    <div class="run-submit-row">
       <button type="submit" class="btn btn-primary btn-lg" id="runButton">
         <i class="bi bi-play-circle me-2"></i>Lancer la réconciliation
       </button>
+      <span class="text-muted small">Le traitement peut prendre quelques minutes selon le volume des fichiers.</span>
     </div>
   </form>
 </div>
@@ -58,7 +60,7 @@
 {% if result %}
   <div class="panel mt-3">
     <div class="d-flex justify-content-between align-items-center mb-2">
-      <h2><i class="bi bi-terminal me-2"></i>Résultat d’exécution</h2>
+      <h2 class="mb-0"><i class="bi bi-terminal me-2"></i>Résultat d’exécution</h2>
       <span class="badge text-bg-{{ 'success' if result.ok else 'danger' }}">
         {% if result.ok %}Succès{% else %}Erreur{% endif %}
       </span>

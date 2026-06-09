@@ -17,16 +17,22 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
             "pdf_rows": 1,
             "matched_invoices": 1,
             "unmatched_erp": 1,
-            "reconciled_invoices": 3,
+            "erp_analyzed_invoices": 2,
+            "reconciled_invoices": 2,
             "erp_matchable_invoices": 2,
             "out_of_scope_rci": 0,
             "rci_out_of_period": 1,
+            "total_rci_pdf_out_of_period": 1,
             "gaps_detected": 1,
             "total_impacted_amount": 250.0,
             "matching_rate": 0.5,
             "missing_rci_out_of_period": 0,
             "out_of_scope_rci_percent": 0.0,
             "low_matching_rate_alert": True,
+            "information_lines": 1,
+            "corrective_batch_generated": True,
+            "corrective_batch_invoice_count": 1,
+            "corrective_batch_total_amount": 25000.0,
         },
         "reconciliation": [
             {
@@ -46,6 +52,7 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
                 "origin": "ENTREE BATCH",
                 "status": "OK",
                 "priority": "BASSE",
+                "severity": "OK",
                 "action_recommandee": "Aucune action",
                 "source_erp": "erp.xlsx:Factures",
                 "source_rci": "rci.txt",
@@ -55,6 +62,7 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
                 "invoice_number": "VF999999",
                 "status": "MANQUANTE_RCI",
                 "priority": "HAUTE",
+                "severity": "MOYENNE",
                 "amount_erp": 250.0,
                 "amount_gap": None,
                 "montant_impacte": 250.0,
@@ -69,6 +77,7 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
                 "rci_date": "2026-04-29",
                 "status": "RCI_HORS_PERIODE",
                 "priority": "BASSE",
+                "severity": "INFORMATION",
                 "montant_impacte": 0.0,
                 "source_rci": "rci.txt",
                 "action_recommandee": "Aucune action",
@@ -117,6 +126,26 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
             ],
             "out_of_scope_rci": [],
         },
+        "corrective_batch": {
+            "generated": True,
+            "batch_path": str(tmp_path / "batch_correctif_candidat_20260520_142811.txt"),
+            "control_path": str(tmp_path / "batch_correctif_candidat_20260520_142811_control.csv"),
+            "invoice_count": 1,
+            "total_amount": 25000.0,
+            "warning": "Fichier candidat à valider par l’équipe facturation avant transmission à RCI.",
+            "records": [
+                {
+                    "invoice_number": "VF777777",
+                    "erp_date": "2026-05-20",
+                    "customer_name": "CASABLANCA",
+                    "amount_erp": 25000.0,
+                    "montant_impacte": 25000.0,
+                    "severity": "ELEVEE",
+                    "status": "MANQUANTE_RCI",
+                    "action_recommandee": "Vérifier la transmission vers RCI et préparer un renvoi si nécessaire.",
+                }
+            ],
+        },
         "source_files": [],
         "anomalies": [],
         "note": "test",
@@ -128,17 +157,15 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
     workbook = openpyxl.load_workbook(path)
     assert workbook.sheetnames == [
         "Synthèse",
+        "Factures et avoirs absents RCI",
         "Détail rapprochement",
-        "Factures manquantes RCI",
-        "Anomalies",
-        "Doublons",
-        "RCI seulement",
-        "RCI hors période",
-        "Hors scope RCI",
-        "Audit dates",
-        "Audit manquantes RCI",
-        "Audit hors scope RCI",
+        "Plan action",
+        "Batch correctif",
+        "Hors périmètre RCI",
+        "RCI PDF hors période",
+        "Qualité référentiel RCI",
         "Synthèse par concessionnaire",
+        "Audit",
     ]
 
     summary = workbook["Synthèse"]
@@ -146,15 +173,22 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
         summary.cell(row=row_index, column=1).value: summary.cell(row=row_index, column=2).value
         for row_index in range(1, summary.max_row + 1)
     }
-    assert summary_values["Factures analysées"] == 3
+    assert summary_values["Nombre total de factures/avoirs ERP analysés"] == 2
+    assert summary_values["Nombre de factures présentes dans RCI"] == 1
+    assert summary_values["Nombre de factures absentes RCI"] == 1
+    assert summary_values["Nombre d'avoirs absents RCI"] == 0
+    assert summary_values["Montant total absent RCI"] == 250.0
+    assert summary_values["Nombre d'écarts critiques"] == 0
+    assert summary_values["Nombre d'écarts élevés"] == 0
+    assert summary_values["Nombre d'écarts moyens"] == 1
     assert summary_values["Factures dans le périmètre RCI"] == 2
     assert summary_values["Factures hors périmètre RCI"] == 0
     assert summary_values["Écarts détectés"] == 1
-    assert summary_values["Montant impacté total"] == 250.0
+    assert summary_values["Batch correctif candidat généré"] == "Oui"
+    assert summary_values["Nombre factures incluses batch correctif"] == 1
+    assert summary_values["Montant total inclus batch correctif"] == 25000.0
     assert summary_values["RCI hors période"] == 1
-    assert summary_values["Alerte taux faible"] == "Oui"
-    assert summary_values["Nombre MANQUANTE_RCI hors période"] == 0
-    assert summary_values["Pourcentage hors scope RCI"] == 0.0
+    assert summary_values["Total lignes RCI/PDF hors période"] == 1
 
     detail = workbook["Détail rapprochement"]
     assert detail.freeze_panes == "A2"
@@ -170,11 +204,44 @@ def test_write_excel_report_creates_professional_workbook(tmp_path) -> None:
     assert detail.cell(row=2, column=status_column).fill.fgColor.rgb.endswith("C6EFCE")
     assert detail.cell(row=3, column=status_column).fill.fgColor.rgb.endswith("FCE4D6")
 
-    missing = workbook["Factures manquantes RCI"]
+    missing = workbook["Factures et avoirs absents RCI"]
     assert missing.max_row == 2
-    assert missing["A2"].value == "VF999999"
+    assert missing["A2"].value == "Facture absente"
+    assert missing["C2"].value == "VF999999"
 
-    assert workbook["Audit dates"].max_row == 3
-    assert workbook["Audit manquantes RCI"].max_row == 2
-    assert workbook["Audit hors scope RCI"].max_row == 1
-    assert workbook["RCI hors période"].max_row == 2
+    assert workbook["Audit"].max_row >= 6
+    assert workbook["RCI PDF hors période"].max_row == 2
+    assert workbook["Plan action"].max_row == 2
+    assert workbook["Batch correctif"].max_row >= 9
+
+
+def test_missing_rci_sheet_displays_empty_message(tmp_path) -> None:
+    report = {
+        "generated_at": "2026-05-20T14:28:11",
+        "status": "completed",
+        "summary": {
+            "erp_analyzed_invoices": 1,
+            "erp_matchable_invoices": 1,
+            "matched_invoices": 1,
+            "matching_rate": 1.0,
+        },
+        "reconciliation": [
+            {
+                "invoice_number": "VF385380",
+                "document_type": "FACTURE",
+                "amount_erp": 100.0,
+                "montant_impacte": 0.0,
+                "status": "OK",
+                "severity": "OK",
+            }
+        ],
+        "source_files": [],
+        "anomalies": [],
+    }
+
+    path = write_excel_report(report, tmp_path, "20260520_142811")
+
+    workbook = openpyxl.load_workbook(path)
+    sheet = workbook["Factures et avoirs absents RCI"]
+    assert sheet["A1"].value == "Message"
+    assert sheet["A2"].value == "Aucune facture ou avoir absent côté RCI pour cette période."

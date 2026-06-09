@@ -19,9 +19,9 @@
 {% if dashboard_alerts %}
   <div class="dashboard-alerts">
     {% for alert in dashboard_alerts %}
-      <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
-        <i class="bi bi-exclamation-triangle-fill mt-1"></i>
-        <div>{{ alert }}</div>
+      <div class="alert alert-{{ alert.class|default('warning') }} d-flex align-items-start gap-2" role="alert">
+        <i class="bi {{ alert.icon|default('bi-exclamation-triangle-fill') }} mt-1"></i>
+        <div>{{ alert.message|default(alert) }}</div>
       </div>
     {% endfor %}
   </div>
@@ -30,7 +30,7 @@
 <div class="row g-3">
   {% for kpi in kpis %}
     <div class="col-12 col-sm-6 col-xl-3">
-      <div class="kpi-card {% if kpi.status %}kpi-{{ status_badge_class(kpi.status) }}{% endif %}">
+      <div class="kpi-card {% if kpi.status %}kpi-{{ status_badge_class(kpi.status) }}{% elif kpi.severity %}kpi-{{ severity_badge_class(kpi.severity) }}{% endif %}">
         <div class="kpi-icon"><i class="bi {{ kpi.icon }}"></i></div>
         <div>
           <div class="kpi-label">{{ kpi.label }}</div>
@@ -45,10 +45,52 @@
               {{ kpi.value|number }}
             {% endif %}
           </div>
+          {% if kpi.description %}
+            <div class="kpi-description">{{ kpi.description }}</div>
+          {% endif %}
         </div>
       </div>
     </div>
   {% endfor %}
+</div>
+
+<div class="row g-3 mt-3">
+  <div class="col-12 col-xl-4">
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <h2><i class="bi bi-pie-chart me-2"></i>Répartition des statuts</h2>
+        <p>Lecture immédiate des lignes du dernier run par statut métier.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_dashboard_charts') }}" data-chart-key="status_distribution" data-chart-type="doughnut"></canvas>
+        <div class="chart-empty d-none">Aucune donnée disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <h2><i class="bi bi-bar-chart me-2"></i>Montant impacté par statut</h2>
+        <p>Montant financier impacté, consolidé par statut du rapprochement.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_dashboard_charts') }}" data-chart-key="impacted_amount_by_status" data-chart-type="bar" data-chart-format="money"></canvas>
+        <div class="chart-empty d-none">Aucun montant impacté disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <h2><i class="bi bi-activity me-2"></i>Gravité des lignes</h2>
+        <p>Répartition par niveau de priorité pour orienter l’action métier.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_dashboard_charts') }}" data-chart-key="severity_distribution" data-chart-type="doughnut"></canvas>
+        <div class="chart-empty d-none">Aucune gravité disponible.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="row g-3 mt-3">
@@ -81,7 +123,9 @@
       <div class="quick-actions">
         <a href="{{ url_for('upload') }}" class="btn btn-outline-primary"><i class="bi bi-cloud-arrow-up me-1"></i>Déposer des fichiers</a>
         <a href="{{ url_for('run') }}" class="btn btn-primary"><i class="bi bi-play-circle me-1"></i>Lancer un traitement</a>
+        <a href="{{ url_for('factures_absentes') }}" class="btn btn-outline-warning"><i class="bi bi-receipt-cutoff me-1"></i>Factures absentes</a>
         <a href="{{ url_for('details') }}" class="btn btn-outline-danger"><i class="bi bi-exclamation-diamond me-1"></i>Consulter les écarts</a>
+        <a href="{{ url_for('action_plan') }}" class="btn btn-outline-primary"><i class="bi bi-list-check me-1"></i>Plan d’action</a>
         {% if last_report %}
           <a href="{{ url_for('download_file', category='reports', filename=last_report.name) }}" class="btn btn-outline-primary"><i class="bi bi-download me-1"></i>Télécharger le dernier rapport</a>
         {% else %}

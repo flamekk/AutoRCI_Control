@@ -54,6 +54,7 @@ def test_reconcile_dataframes_produces_ok_with_pdf_priority() -> None:
     row = result.iloc[0]
     assert row["invoice_number"] == "VF385380"
     assert row["status"] == "OK"
+    assert row["severity"] == "OK"
     assert row["amount_gap"] == 0.5
     assert row["pdf_invoice_date"] == "2026-05-15"
     assert row["origin"] == "ENTREE BATCH"
@@ -141,4 +142,28 @@ def test_reconcile_report_contains_summary_and_reconciliation_rows() -> None:
     assert report["summary"]["unmatched_erp"] == 1
     assert report["summary"]["anomalies"] == 1
     assert report["reconciliation"][0]["status"] == "MANQUANTE_RCI"
+    assert report["reconciliation"][0]["severity"] == "MOYENNE"
     assert "transmission" in report["reconciliation"][0]["action_recommandee"]
+
+
+def test_reconcile_summary_excludes_rci_out_of_period_from_erp_analyzed() -> None:
+    erp = pd.DataFrame(
+        [{"source_file": "erp.xlsx", "invoice_number": "VF1000", "amount_erp": 100, "erp_date": "2026-05-15"}]
+    )
+    rci_out_of_period = pd.DataFrame(
+        [{"source_file": "rci.txt", "invoice_number": "VF2000", "amount_rci": 50, "rci_date": "2026-04-29"}]
+    )
+
+    report = reconcile(
+        erp,
+        pd.DataFrame(),
+        pd.DataFrame(),
+        amount_tolerance=1.0,
+        rci_out_of_period_records=rci_out_of_period,
+    )
+
+    assert report["summary"]["erp_analyzed_invoices"] == 1
+    assert report["summary"]["reconciled_invoices"] == 1
+    assert report["summary"]["rci_out_of_period"] == 1
+    assert report["summary"]["total_rci_pdf_out_of_period"] == 1
+    assert report["summary"]["gaps_detected"] == 1

@@ -23,6 +23,8 @@ def test_update_reconciliation_history_appends_and_deduplicates_same_run(tmp_pat
             "origin": "ENTREE BATCH",
             "status": "OK",
             "priority": "BASSE",
+            "severity": "OK",
+            "included_in_corrective_batch": False,
             "action_recommandee": "Aucune action",
         }
     ]
@@ -51,6 +53,8 @@ def test_write_powerbi_exports_creates_history_file(tmp_path) -> None:
                 "document_type": "FACTURE",
                 "status": "OK",
                 "priority": "BASSE",
+                "severity": "OK",
+                "included_in_corrective_batch": False,
                 "amount_erp": 100,
                 "amount_gap": 0,
                 "action_recommandee": "Aucune action",
@@ -67,6 +71,9 @@ def test_write_powerbi_exports_creates_history_file(tmp_path) -> None:
     assert rows[0]["processing_date"] == "2026-05-20"
     assert rows[0]["processing_run_id"] == "20260520_142811"
     assert rows[0]["invoice_number"] == "VF385380"
+    assert "severity" in rows[0]
+    assert "included_in_corrective_batch" in rows[0]
+    assert rows[0]["severity"] == "OK"
 
 
 def _read_csv(path):

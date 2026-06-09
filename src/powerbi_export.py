@@ -26,6 +26,8 @@ HISTORY_COLUMNS = [
     "origin",
     "status",
     "priority",
+    "severity",
+    "included_in_corrective_batch",
     "action_recommandee",
 ]
 
@@ -214,6 +216,8 @@ def _reconciliation_fieldnames(records: list[dict[str, Any]]) -> list[str]:
         "origin",
         "status",
         "priority",
+        "severity",
+        "included_in_corrective_batch",
         "action_recommandee",
         "source_erp",
         "source_rci",

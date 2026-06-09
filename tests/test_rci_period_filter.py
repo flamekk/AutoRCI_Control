@@ -79,6 +79,8 @@ def test_rci_out_of_period_becomes_dedicated_status_with_zero_impact() -> None:
     assert row["status"] == "RCI_HORS_PERIODE"
     assert row["montant_impacte"] == pytest.approx(0.0)
     assert report["summary"]["rci_out_of_period"] == 1
+    assert report["summary"]["total_rci_pdf_out_of_period"] == 1
+    assert report["summary"]["erp_analyzed_invoices"] == 0
     assert report["summary"]["unmatched_rci"] == 0
     assert report["summary"]["gaps_detected"] == 0
     assert report["summary"]["no_rci_flux_in_period_alert"] is True
@@ -94,6 +96,8 @@ def test_period_30_04_does_not_create_rci_seulement_for_previous_rci_batch() -> 
     assert report["summary"]["unmatched_erp"] == 63
     assert report["summary"]["unmatched_rci"] == 0
     assert report["summary"]["rci_out_of_period"] == 97
+    assert report["summary"]["total_rci_pdf_out_of_period"] == 97
+    assert report["summary"]["erp_analyzed_invoices"] == 63
     assert report["summary"]["gaps_detected"] == 63
 
 
@@ -104,6 +108,7 @@ def test_period_29_04_keeps_matching_rci_batch_ok() -> None:
     report = _run_period(erp_rows, rci_rows, "2026-04-29", "2026-04-29")
 
     assert report["summary"]["matched_invoices"] == 97
+    assert report["summary"]["erp_analyzed_invoices"] == 97
     assert report["summary"]["unmatched_erp"] == 0
     assert report["summary"]["unmatched_rci"] == 0
     assert report["summary"]["rci_out_of_period"] == 0

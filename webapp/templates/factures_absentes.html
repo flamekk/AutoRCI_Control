@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Factures absentes - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Factures et avoirs absents RCI</h1>
+    <p class="text-muted mb-0">Liste métier des factures et avoirs présents dans le batch ERP mais absents du batch RCI.</p>
+  </div>
+  <div class="source-pill">
+    {% if source_file %}Source : {{ source_file.name }}{% else %}Aucun rapprochement disponible{% endif %}
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for kpi in kpis %}
+    <div class="col-12 col-sm-6 col-xl-2">
+      <div class="kpi-card {% if kpi.status %}kpi-{{ status_badge_class(kpi.status) }}{% elif kpi.severity %}kpi-{{ severity_badge_class(kpi.severity) }}{% endif %}">
+        <div class="kpi-icon"><i class="bi {{ kpi.icon }}"></i></div>
+        <div>
+          <div class="kpi-label">{{ kpi.label }}</div>
+          <div class="kpi-value">
+            {% if kpi.kind == 'money' %}
+              {{ kpi.value|mad }}
+            {% else %}
+              {{ kpi.value|number }}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="panel action-batch-panel mb-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-download me-2"></i>Exports exploitables</h2>
+      <p class="text-muted mb-0">Téléchargements liés aux factures et avoirs absents côté RCI.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if latest_missing_export %}
+        <a class="btn btn-outline-primary" href="{{ url_for('download_file', category='anomalies', filename=latest_missing_export.name) }}">
+          <i class="bi bi-download me-1"></i>Télécharger la liste des absents
+        </a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>Télécharger la liste des absents</button>
+      {% endif %}
+      {% if last_report %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('download_file', category='reports', filename=last_report.name) }}">
+          <i class="bi bi-file-earmark-spreadsheet me-1"></i>Télécharger le rapport Excel complet
+        </a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>Télécharger le rapport Excel complet</button>
+      {% endif %}
+      {% if latest_batch %}
+        <a class="btn btn-outline-danger" href="{{ url_for('download_file', category='corrections', filename=latest_batch.name) }}">
+          <i class="bi bi-file-earmark-check me-1"></i>Télécharger le batch correctif candidat
+        </a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>Télécharger le batch correctif candidat</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="panel filter-panel mb-3">
+  <form method="get" class="row g-3 align-items-end">
+    <div class="col-12 col-md-2">
+      <label class="form-label" for="categorie">Catégorie</label>
+      <select class="form-select" id="categorie" name="categorie">
+        <option value="">Toutes</option>
+        {% for categorie in options.categories %}
+          <option value="{{ categorie }}" {% if filters.categorie == categorie %}selected{% endif %}>{{ categorie }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2">
+      <label class="form-label" for="severity">Sévérité</label>
+      <select class="form-select" id="severity" name="severity">
+        <option value="">Toutes</option>
+        {% for severity in options.severities %}
+          <option value="{{ severity }}" {% if filters.severity == severity %}selected{% endif %}>{{ severity }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="customer_name">Concessionnaire</label>
+      <input class="form-control" id="customer_name" name="customer_name" value="{{ filters.customer_name }}" list="missingCustomers" placeholder="Nom concessionnaire">
+      <datalist id="missingCustomers">
+        {% for customer in options.customers %}
+          <option value="{{ customer }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+    <div class="col-12 col-md-2">
+      <label class="form-label" for="date_from">Date facture</label>
+      <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from }}">
+    </div>
+    <div class="col-12 col-md-2">
+      <label class="form-label" for="included_in_corrective_batch">Inclus batch</label>
+      <select class="form-select" id="included_in_corrective_batch" name="included_in_corrective_batch">
+        <option value="">Tous</option>
+        <option value="true" {% if filters.included_in_corrective_batch == 'true' %}selected{% endif %}>Oui</option>
+        <option value="false" {% if filters.included_in_corrective_batch == 'false' %}selected{% endif %}>Non</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-1 d-grid">
+      <button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-1"></i>Filtrer</button>
+    </div>
+  </form>
+</div>
+
+<div class="panel">
+  {% if rows %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover table-sm align-middle data-table">
+        <thead>
+          <tr>
+            <th>Catégorie</th>
+            <th>Sévérité</th>
+            <th>N° facture / avoir</th>
+            <th>Date facture</th>
+            <th>Date échéance</th>
+            <th>Concessionnaire</th>
+            <th class="text-end">Montant ERP</th>
+            <th class="text-end">Montant impacté</th>
+            <th>Action recommandée</th>
+            <th>Inclus batch correctif</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td>{{ row.get("categorie", "") }}</td>
+              <td><span class="badge status-badge text-bg-{{ severity_badge_class(row.get('severity')) }}">{{ row.get("severity", "") }}</span></td>
+              <td class="fw-semibold">{{ row.get("invoice_number", "") }}</td>
+              <td>{{ row.get("erp_date", "") }}</td>
+              <td>{{ row.get("due_date", "") }}</td>
+              <td>{{ row.get("customer_name", "") }}</td>
+              <td class="text-end">{{ row.get("amount_erp")|mad }}</td>
+              <td class="text-end">{{ row.get("montant_impacte")|mad }}</td>
+              <td>{{ row.get("action_recommandee", "") }}</td>
+              <td>
+                {% if row.get("included_in_corrective_batch") %}
+                  <span class="badge text-bg-danger">Oui</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Non</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-check-circle empty-state-icon"></i>
+      <span>Aucune facture ou avoir absent côté RCI pour cette période.</span>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

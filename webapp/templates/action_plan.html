@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Plan d’action - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Plan d’action</h1>
+    <p class="text-muted mb-0">Priorisation métier des écarts et contrôles à réaliser par l’équipe facturation.</p>
+  </div>
+  <div class="source-pill">
+    {% if source_file %}Source : {{ source_file.name }}{% else %}Aucun rapprochement disponible{% endif %}
+  </div>
+</div>
+
+<div class="panel action-batch-panel mb-4">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-file-earmark-check me-2"></i>Batch correctif candidat</h2>
+      <p class="text-muted mb-0">Fichier candidat à valider par l’équipe facturation avant transmission à RCI.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if latest_batch %}
+        <a class="btn btn-outline-primary" href="{{ url_for('download_file', category='corrections', filename=latest_batch.name) }}">
+          <i class="bi bi-download me-1"></i>Télécharger le batch correctif candidat
+        </a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>Télécharger le batch correctif candidat</button>
+      {% endif %}
+      {% if latest_batch_control %}
+        <a class="btn btn-outline-secondary" href="{{ url_for('download_file', category='corrections', filename=latest_batch_control.name) }}">
+          <i class="bi bi-download me-1"></i>Télécharger le fichier de contrôle
+        </a>
+      {% else %}
+        <button class="btn btn-outline-secondary" disabled>Télécharger le fichier de contrôle</button>
+      {% endif %}
+    </div>
+  </div>
+  {% if not latest_batch and not latest_batch_control %}
+    <div class="empty-state mt-3">
+      <i class="bi bi-file-earmark-check empty-state-icon"></i>
+      <span>Aucun batch correctif candidat généré pour ce run.</span>
+    </div>
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-4">
+  {% for kpi in severity_kpis %}
+    <div class="col-12 col-sm-6 col-xl">
+      <div class="kpi-card kpi-{{ severity_badge_class(kpi.severity) }}">
+        <div class="kpi-icon"><i class="bi {{ kpi.icon }}"></i></div>
+        <div>
+          <div class="kpi-label">{{ kpi.label }}</div>
+          <div class="kpi-value">{{ kpi.value|number }}</div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-xl-6">
+    <div class="panel chart-panel chart-panel-tall">
+      <div class="chart-header">
+        <h2><i class="bi bi-cash-stack me-2"></i>Top concessionnaires par montant impacté</h2>
+        <p>Concessionnaires concentrant les montants MANQUANTE_RCI ou écarts prioritaires.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_action_plan_charts') }}" data-chart-key="top_customers_impacted_amount" data-chart-type="bar" data-chart-axis="y" data-chart-format="money"></canvas>
+        <div class="chart-empty d-none">Aucun montant prioritaire disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-6">
+    <div class="panel chart-panel chart-panel-tall">
+      <div class="chart-header">
+        <h2><i class="bi bi-list-ol me-2"></i>Top concessionnaires par nombre d’écarts</h2>
+        <p>Volume de lignes à traiter par concessionnaire, hors lignes OK.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_action_plan_charts') }}" data-chart-key="top_customers_gap_count" data-chart-type="bar" data-chart-axis="y"></canvas>
+        <div class="chart-empty d-none">Aucun écart disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12">
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <h2><i class="bi bi-pie-chart me-2"></i>Répartition des écarts par sévérité</h2>
+        <p>Vision synthétique des priorités du plan d’action.</p>
+      </div>
+      <div class="chart-canvas-wrap chart-canvas-wrap-sm">
+        <canvas data-chart-endpoint="{{ url_for('api_action_plan_charts') }}" data-chart-key="severity_gap_distribution" data-chart-type="doughnut"></canvas>
+        <div class="chart-empty d-none">Aucune sévérité à afficher.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel filter-panel mb-3">
+  <form method="get" class="row g-3 align-items-end">
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="severity">Sévérité</label>
+      <select class="form-select" id="severity" name="severity">
+        <option value="">Toutes</option>
+        {% for severity in options.severities %}
+          <option value="{{ severity }}" {% if filters.severity == severity %}selected{% endif %}>{{ severity }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label" for="status">Statut</label>
+      <select class="form-select" id="status" name="status">
+        <option value="">Tous</option>
+        {% for status in options.statuses %}
+          <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="form-label" for="customer_name">Concessionnaire</label>
+      <input class="form-control" id="customer_name" name="customer_name" value="{{ filters.customer_name }}" list="actionCustomers" placeholder="Nom client">
+      <datalist id="actionCustomers">
+        {% for customer in options.customers %}
+          <option value="{{ customer }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+    <div class="col-12 col-md-2 d-grid">
+      <button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-1"></i>Filtrer</button>
+    </div>
+  </form>
+</div>
+
+{% include "_results_table.html" %}
+
+<div class="panel reference-quality-panel">
+  <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h2 class="mb-1">Qualité référentiel RCI</h2>
+      <p class="text-muted mb-0">Clients hors périmètre à vérifier avant mise à jour éventuelle du référentiel.</p>
+    </div>
+    <span class="badge text-bg-secondary">{{ reference_suggestions|length }} client(s)</span>
+  </div>
+  {% if reference_suggestions %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover table-sm align-middle data-table">
+        <thead>
+          <tr>
+            <th>customer_name</th>
+            <th>nombre_factures</th>
+            <th>montant_total_erp</th>
+            <th>closest_reference_name</th>
+            <th>closest_reference_similarity</th>
+            <th>suggestion_action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in reference_suggestions %}
+            <tr>
+              <td>{{ row.get("customer_name", "") }}</td>
+              <td>{{ row.get("nombre_factures", "")|number }}</td>
+              <td class="text-end">{{ row.get("montant_total_erp", "")|mad }}</td>
+              <td>{{ row.get("closest_reference_name", "") }}</td>
+              <td>{{ row.get("closest_reference_similarity", "") }}</td>
+              <td>{{ row.get("suggestion_action", "") }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-shield-check empty-state-icon"></i>
+      <span>Aucun client hors périmètre RCI détecté dans le dernier run.</span>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

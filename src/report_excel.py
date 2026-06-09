@@ -7,8 +7,32 @@ from typing import Any
 
 try:
     from src.audit import enrich_report_with_audits
+    from src.action_plan import (
+        REFERENCE_SUGGESTION_COLUMNS,
+        build_reference_suggestions,
+        sort_action_plan_records,
+    )
+    from src.missing_rci import (
+        ABSENT_RCI_COLUMNS,
+        ABSENT_RCI_HEADERS,
+        NO_MISSING_RCI_MESSAGE,
+        build_missing_rci_records,
+        missing_rci_summary,
+    )
 except ModuleNotFoundError:  # pragma: no cover - used when running python src/main.py.
     from audit import enrich_report_with_audits
+    from action_plan import (
+        REFERENCE_SUGGESTION_COLUMNS,
+        build_reference_suggestions,
+        sort_action_plan_records,
+    )
+    from missing_rci import (
+        ABSENT_RCI_COLUMNS,
+        ABSENT_RCI_HEADERS,
+        NO_MISSING_RCI_MESSAGE,
+        build_missing_rci_records,
+        missing_rci_summary,
+    )
 
 try:
     from openpyxl import Workbook
@@ -40,6 +64,8 @@ RECONCILIATION_COLUMNS = [
     "origin",
     "status",
     "priority",
+    "severity",
+    "included_in_corrective_batch",
     "action_recommandee",
     "source_erp",
     "source_rci",
@@ -65,6 +91,8 @@ RECONCILIATION_HEADERS = {
     "origin": "Origine",
     "status": "Statut",
     "priority": "Priorité",
+    "severity": "Sévérité",
+    "included_in_corrective_batch": "Inclus batch correctif",
     "action_recommandee": "Action recommandée",
     "source_erp": "Source ERP",
     "source_rci": "Source RCI",
@@ -83,6 +111,24 @@ STATUS_FILLS = {
     "HORS_SCOPE_RCI": "E7E6E6",
 }
 
+SEVERITY_FILLS = {
+    "CRITIQUE": "FFC7CE",
+    "ELEVEE": "FCE4D6",
+    "MOYENNE": "FFF2CC",
+    "A_VERIFIER": "E7E6E6",
+    "INFORMATION": "DDEBF7",
+    "OK": "C6EFCE",
+}
+
+SEVERITY_FONT_COLORS = {
+    "CRITIQUE": "9C0006",
+    "ELEVEE": "9C5700",
+    "MOYENNE": "7F6000",
+    "A_VERIFIER": "666666",
+    "INFORMATION": "1F4E78",
+    "OK": "006100",
+}
+
 STATUS_FONT_COLORS = {
     "OK": "006100",
     "MANQUANTE_RCI": "9C5700",
@@ -99,6 +145,8 @@ SUMMARY_MONEY_LABELS = {
     "Montant total contrôlé",
     "Montant impacté total",
     "Montant manquant RCI",
+    "Montant total absent RCI",
+    "Montant total inclus batch correctif",
 }
 SUMMARY_PERCENT_LABELS = {
     "Taux de rapprochement",
@@ -138,8 +186,11 @@ RCI_OUT_OF_PERIOD_COLUMNS = [
     "invoice_number",
     "document_type",
     "rci_date",
+    "pdf_invoice_date",
     "amount_rci",
+    "amount_pdf",
     "source_rci",
+    "source_pdf",
     "status",
     "montant_impacte",
     "commentaire_audit",
@@ -157,6 +208,33 @@ AUDIT_OUT_OF_SCOPE_COLUMNS = [
     "commentaire_audit",
 ]
 
+ACTION_PLAN_COLUMNS = [
+    "severity",
+    "invoice_number",
+    "erp_date",
+    "customer_name",
+    "amount_erp",
+    "amount_rci",
+    "amount_pdf",
+    "montant_impacte",
+    "status",
+    "action_recommandee",
+    "source_erp",
+    "source_rci",
+    "source_pdf",
+]
+
+BATCH_CORRECTIF_COLUMNS = [
+    "invoice_number",
+    "erp_date",
+    "customer_name",
+    "amount_erp",
+    "montant_impacte",
+    "severity",
+    "status",
+    "action_recommandee",
+]
+
 
 def write_excel_report(report: dict[str, Any], output_dir: Path, run_id: str) -> Path:
     workbook_class = _require_openpyxl()
@@ -170,63 +248,48 @@ def write_excel_report(report: dict[str, Any], output_dir: Path, run_id: str) ->
     workbook.remove(workbook.active)
 
     reconciliation_rows = list(report.get("reconciliation", []))
+    missing_rci_rows = build_missing_rci_records(reconciliation_rows)
+    report["missing_rci_records"] = missing_rci_rows
+    report.setdefault("summary", {}).update(missing_rci_summary(reconciliation_rows))
+    action_plan_rows = [
+        row for row in sort_action_plan_records(reconciliation_rows)
+        if row.get("severity") != "INFORMATION"
+    ]
+    audits = report.get("audits", {})
 
     _write_rows_sheet(workbook, "Synthèse", _summary_rows(report, generated_at), table_name="TableSynthese")
+    _write_missing_rci_sheet(workbook, missing_rci_rows, "TableAbsentsRCI")
     _write_reconciliation_sheet(workbook, "Détail rapprochement", reconciliation_rows, "TableDetail")
-    _write_reconciliation_sheet(
+    _write_action_plan_sheet(
         workbook,
-        "Factures manquantes RCI",
-        _filter_status(reconciliation_rows, {"MANQUANTE_RCI"}),
-        "TableManquantesRCI",
+        action_plan_rows,
+        "TablePlanAction",
+    )
+    _write_batch_correctif_sheet(
+        workbook,
+        report.get("corrective_batch", {}),
+        "TableBatchCorrectif",
     )
     _write_reconciliation_sheet(
         workbook,
-        "Anomalies",
-        _filter_status(reconciliation_rows, {"ANOMALIE_MONTANT", "ANOMALIE_DATE"}),
-        "TableAnomalies",
-    )
-    _write_reconciliation_sheet(
-        workbook,
-        "Doublons",
-        _filter_status(reconciliation_rows, {"DOUBLON"}),
-        "TableDoublons",
-    )
-    _write_reconciliation_sheet(
-        workbook,
-        "RCI seulement",
-        _filter_status(reconciliation_rows, {"RCI_SEULEMENT"}),
-        "TableRCISeulement",
-    )
-    _write_rows_sheet(
-        workbook,
-        "RCI hors période",
-        _dict_rows(_filter_status(reconciliation_rows, {"RCI_HORS_PERIODE"}), RCI_OUT_OF_PERIOD_COLUMNS),
-        table_name="TableRCIHorsPeriode",
-    )
-    _write_reconciliation_sheet(
-        workbook,
-        "Hors scope RCI",
+        "Hors périmètre RCI",
         _filter_status(reconciliation_rows, {"HORS_SCOPE_RCI"}),
-        "TableHorsScopeRCI",
-    )
-    audits = report.get("audits", {})
-    _write_rows_sheet(
-        workbook,
-        "Audit dates",
-        _dict_rows(audits.get("dates", []), AUDIT_DATES_COLUMNS),
-        table_name="TableAuditDates",
+        "TableHorsPerimetreRCI",
     )
     _write_rows_sheet(
         workbook,
-        "Audit manquantes RCI",
-        _dict_rows(audits.get("missing_rci", []), AUDIT_MISSING_RCI_COLUMNS),
-        table_name="TableAuditManquantesRCI",
+        "RCI PDF hors période",
+        _dict_rows(_filter_status(reconciliation_rows, {"RCI_HORS_PERIODE"}), RCI_OUT_OF_PERIOD_COLUMNS),
+        table_name="TableRCIPDFHorsPeriode",
     )
     _write_rows_sheet(
         workbook,
-        "Audit hors scope RCI",
-        _dict_rows(audits.get("out_of_scope_rci", []), AUDIT_OUT_OF_SCOPE_COLUMNS),
-        table_name="TableAuditHorsScopeRCI",
+        "Qualité référentiel RCI",
+        _dict_rows(
+            report.get("reference_quality") or build_reference_suggestions(reconciliation_rows),
+            REFERENCE_SUGGESTION_COLUMNS,
+        ),
+        table_name="TableQualiteReferentielRCI",
     )
     _write_rows_sheet(
         workbook,
@@ -234,6 +297,7 @@ def write_excel_report(report: dict[str, Any], output_dir: Path, run_id: str) ->
         _dealer_summary_rows(reconciliation_rows),
         table_name="TableSyntheseConcessionnaire",
     )
+    _write_audit_sheet(workbook, audits, "TableAudit")
 
     workbook.save(workbook_path)
     return workbook_path
@@ -243,8 +307,6 @@ def _summary_rows(report: dict[str, Any], generated_at: datetime) -> list[list[A
     summary = report.get("summary", {})
     reconciliation = report.get("reconciliation", [])
     status_counts = _status_counts(reconciliation)
-    erp_total = int(summary.get("erp_rows", 0) or 0)
-    rci_pdf_total = int(summary.get("rci_rows", 0) or 0) + int(summary.get("pdf_rows", 0) or 0)
     ok_count = status_counts.get("OK", int(summary.get("matched_invoices", 0) or 0))
     missing_count = status_counts.get("MANQUANTE_RCI", int(summary.get("unmatched_erp", 0) or 0))
     amount_anomalies = status_counts.get("ANOMALIE_MONTANT", int(summary.get("amount_anomalies", 0) or 0))
@@ -253,10 +315,15 @@ def _summary_rows(report: dict[str, Any], generated_at: datetime) -> list[list[A
     rci_only = status_counts.get("RCI_SEULEMENT", int(summary.get("unmatched_rci", 0) or 0))
     rci_out_of_period = status_counts.get("RCI_HORS_PERIODE", int(summary.get("rci_out_of_period", 0) or 0))
     out_of_scope = status_counts.get("HORS_SCOPE_RCI", int(summary.get("out_of_scope_rci", 0) or 0))
-    analyzed_total = int(summary.get("reconciled_invoices", len(reconciliation)) or 0)
-    total_controlled = float(summary.get("total_controlled_amount", 0) or _sum_amounts(reconciliation, "amount_erp"))
-    total_impacted = float(summary.get("total_impacted_amount", 0) or _sum_abs_amounts(reconciliation, "montant_impacte"))
-    missing_rci_amount = float(summary.get("missing_rci_amount", 0) or 0)
+    analyzed_total = int(summary.get("erp_analyzed_invoices", summary.get("reconciled_invoices", 0)) or 0)
+    if analyzed_total == 0:
+        analyzed_total = ok_count + missing_count + out_of_scope + amount_anomalies + date_anomalies + duplicates
+    missing_summary = missing_rci_summary(reconciliation)
+    missing_invoice_count = int(summary.get("missing_rci_invoice_count", missing_summary["missing_rci_invoice_count"]) or 0)
+    missing_credit_note_count = int(
+        summary.get("missing_rci_credit_note_count", missing_summary["missing_rci_credit_note_count"]) or 0
+    )
+    missing_rci_amount = float(summary.get("missing_rci_total_amount", missing_summary["missing_rci_total_amount"]) or 0)
     erp_matchable = int(summary.get("erp_matchable_invoices", 0) or (
         ok_count + missing_count + amount_anomalies + date_anomalies + duplicates
     ))
@@ -264,40 +331,34 @@ def _summary_rows(report: dict[str, Any], generated_at: datetime) -> list[list[A
         missing_count + amount_anomalies + date_anomalies + duplicates + rci_only
     ))
     matching_rate = float(summary.get("matching_rate", 0) or (ok_count / erp_matchable if erp_matchable else 0))
+    present_in_rci_count = ok_count + amount_anomalies + date_anomalies + duplicates
 
     return [
         ["Indicateur", "Valeur"],
+        ["Résultat du contrôle batch ERP vs batch RCI", ""],
         ["Date de traitement", generated_at.strftime("%Y-%m-%d %H:%M")],
         ["Période de rapprochement", summary.get("reconciliation_period", "filtre desactive")],
-        ["ERP avant filtre", int(summary.get("erp_rows_before_date_filter", erp_total) or 0)],
-        ["ERP après filtre", int(summary.get("erp_rows_after_date_filter", erp_total) or 0)],
-        ["Lignes ERP exclues par date", int(summary.get("erp_rows_excluded_by_date", 0) or 0)],
-        ["RCI avant filtre date", int(summary.get("rci_rows_before_date_filter", summary.get("rci_rows", 0)) or 0)],
-        ["RCI après filtre date", int(summary.get("rci_rows_after_date_filter", summary.get("rci_rows", 0)) or 0)],
-        ["RCI exclu par période", int(summary.get("rci_rows_excluded_by_date", 0) or 0)],
-        ["Alerte aucun flux RCI dans la période", _yes_no(summary.get("no_rci_flux_in_period_alert", False))],
-        ["Factures analysées", analyzed_total],
+        ["Nombre total de factures/avoirs ERP analysés", analyzed_total],
+        ["Nombre de factures présentes dans RCI", present_in_rci_count],
+        ["Nombre de factures absentes RCI", missing_invoice_count],
+        ["Nombre d'avoirs absents RCI", missing_credit_note_count],
+        ["Montant total absent RCI", missing_rci_amount],
+        ["Nombre d'écarts critiques", int(summary.get("missing_rci_critical_count", missing_summary["missing_rci_critical_count"]) or 0)],
+        ["Nombre d'écarts élevés", int(summary.get("missing_rci_high_count", missing_summary["missing_rci_high_count"]) or 0)],
+        ["Nombre d'écarts moyens", int(summary.get("missing_rci_medium_count", missing_summary["missing_rci_medium_count"]) or 0)],
+        ["Taux de rapprochement", matching_rate],
+        ["Informations complémentaires", ""],
         ["Factures dans le périmètre RCI", erp_matchable],
         ["Factures hors périmètre RCI", out_of_scope],
-        ["Factures OK", ok_count],
-        ["Factures manquantes RCI", missing_count],
         ["Écarts détectés", gaps_detected],
-        ["Montant impacté total", total_impacted],
-        ["Alerte taux faible", _yes_no(summary.get("low_matching_rate_alert", matching_rate < 0.70 if erp_matchable else False))],
-        ["Nombre MANQUANTE_RCI hors période", int(summary.get("missing_rci_out_of_period", 0) or 0)],
-        ["Alerte MANQUANTE_RCI hors période", _yes_no(summary.get("missing_rci_out_of_period_alert", False))],
-        ["Pourcentage hors scope RCI", float(summary.get("out_of_scope_rci_percent", (out_of_scope / analyzed_total if analyzed_total else 0)) or 0)],
-        ["Alerte hors scope RCI élevé", _yes_no(summary.get("out_of_scope_rate_alert", False))],
-        ["Nombre total RCI/PDF", rci_pdf_total],
-        ["Nombre ANOMALIE_MONTANT", amount_anomalies],
-        ["Nombre ANOMALIE_DATE", date_anomalies],
-        ["Nombre DOUBLON", duplicates],
-        ["Nombre RCI_SEULEMENT", rci_only],
+        ["RCI seulement", rci_only],
         ["RCI hors période", rci_out_of_period],
-        ["Nombre factures couvertes RCI", int(summary.get("rci_covered_invoices", 0) or 0)],
-        ["Montant total contrôlé", total_controlled],
-        ["Montant manquant RCI", missing_rci_amount],
-        ["Taux de rapprochement", matching_rate],
+        ["Total lignes RCI/PDF hors période", int(summary.get("total_rci_pdf_out_of_period", rci_out_of_period) or 0)],
+        ["Alerte aucun flux RCI dans la période", _yes_no(summary.get("no_rci_flux_in_period_alert", False))],
+        ["Alerte PDF hors période RCI", _yes_no(summary.get("pdf_period_mismatch_alert", False))],
+        ["Batch correctif candidat généré", _yes_no(summary.get("corrective_batch_generated", False))],
+        ["Nombre factures incluses batch correctif", int(summary.get("corrective_batch_invoice_count", 0) or 0)],
+        ["Montant total inclus batch correctif", float(summary.get("corrective_batch_total_amount", 0) or 0)],
     ]
 
 
@@ -310,9 +371,158 @@ def _write_reconciliation_sheet(
 
     worksheet = _write_rows_sheet(workbook, sheet_name, rows, table_name=table_name)
     status_column = RECONCILIATION_COLUMNS.index("status") + 1
+    severity_column = RECONCILIATION_COLUMNS.index("severity") + 1
     for row_index in range(2, worksheet.max_row + 1):
         _apply_status_style(worksheet, row_index, status_column)
+        _apply_severity_style(worksheet, row_index, severity_column)
     _format_money_columns(worksheet, RECONCILIATION_COLUMNS)
+
+
+def _write_missing_rci_sheet(workbook: Any, records: list[dict[str, Any]], table_name: str) -> None:
+    if not records:
+        worksheet = _write_rows_sheet(
+            workbook,
+            "Factures et avoirs absents RCI",
+            [["Message"], [NO_MISSING_RCI_MESSAGE]],
+            table_name=table_name,
+        )
+        worksheet["A2"].font = Font(bold=True, color="006100")
+        return
+
+    rows = [[ABSENT_RCI_HEADERS[column] for column in ABSENT_RCI_COLUMNS]]
+    for record in records:
+        rows.append([_clean_cell_value(record.get(column)) for column in ABSENT_RCI_COLUMNS])
+
+    worksheet = _write_rows_sheet(workbook, "Factures et avoirs absents RCI", rows, table_name=table_name)
+    severity_column = ABSENT_RCI_COLUMNS.index("severity") + 1
+    status_column = ABSENT_RCI_COLUMNS.index("status") + 1
+    for row_index in range(2, worksheet.max_row + 1):
+        _apply_severity_style(worksheet, row_index, severity_column)
+        _apply_status_style(worksheet, row_index, status_column)
+    _format_money_columns(worksheet, ABSENT_RCI_COLUMNS)
+
+
+def _write_action_plan_sheet(workbook: Any, records: list[dict[str, Any]], table_name: str) -> None:
+    rows = [[RECONCILIATION_HEADERS.get(column, column) for column in ACTION_PLAN_COLUMNS]]
+    for record in records:
+        rows.append([_clean_cell_value(record.get(column)) for column in ACTION_PLAN_COLUMNS])
+
+    worksheet = _write_rows_sheet(workbook, "Plan action", rows, table_name=table_name)
+    severity_column = ACTION_PLAN_COLUMNS.index("severity") + 1
+    status_column = ACTION_PLAN_COLUMNS.index("status") + 1
+    for row_index in range(2, worksheet.max_row + 1):
+        _apply_severity_style(worksheet, row_index, severity_column)
+        _apply_status_style(worksheet, row_index, status_column)
+    _format_money_columns(worksheet, ACTION_PLAN_COLUMNS)
+
+
+def _write_batch_correctif_sheet(workbook: Any, batch: dict[str, Any], table_name: str) -> None:
+    records = list(batch.get("records", []))
+    rows: list[list[Any]] = [
+        ["Indicateur", "Valeur"],
+        ["Chemin du batch généré", batch.get("batch_path", "")],
+        ["Chemin du fichier de contrôle", batch.get("control_path", "")],
+        ["Nombre de factures incluses", int(batch.get("invoice_count", 0) or 0)],
+        ["Montant total inclus", float(batch.get("total_amount", 0) or 0)],
+        [
+            "Avertissement",
+            batch.get(
+                "warning",
+                "Fichier candidat à valider par l’équipe facturation avant transmission à RCI.",
+            ),
+        ],
+        [],
+        [RECONCILIATION_HEADERS.get(column, column) for column in BATCH_CORRECTIF_COLUMNS],
+    ]
+    for record in records:
+        rows.append([_clean_cell_value(record.get(column)) for column in BATCH_CORRECTIF_COLUMNS])
+
+    worksheet = workbook.create_sheet(title="Batch correctif")
+    for row in rows:
+        worksheet.append([_clean_cell_value(value) for value in row])
+
+    _style_batch_correctif_sheet(worksheet, table_name, len(records))
+
+
+def _style_batch_correctif_sheet(worksheet: Any, table_name: str, record_count: int) -> None:
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    header_font = Font(bold=True, color="FFFFFF")
+    for cell in worksheet[1]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for row_index in range(2, 7):
+        worksheet.cell(row=row_index, column=1).font = Font(bold=True)
+    worksheet.cell(row=5, column=2).number_format = '#,##0.00'
+    worksheet.cell(row=6, column=2).font = Font(bold=True, color="9C5700")
+    worksheet.cell(row=6, column=2).alignment = Alignment(wrap_text=True)
+
+    detail_header_row = 8
+    for cell in worksheet[detail_header_row]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    if record_count:
+        ref = f"A{detail_header_row}:{get_column_letter(worksheet.max_column)}{worksheet.max_row}"
+        table = Table(displayName=_safe_table_name(table_name), ref=ref)
+        table.tableStyleInfo = TableStyleInfo(
+            name=TABLE_STYLE,
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False,
+        )
+        worksheet.add_table(table)
+        severity_column = BATCH_CORRECTIF_COLUMNS.index("severity") + 1
+        status_column = BATCH_CORRECTIF_COLUMNS.index("status") + 1
+        for row_index in range(detail_header_row + 1, worksheet.max_row + 1):
+            _apply_severity_style(worksheet, row_index, severity_column)
+            _apply_status_style(worksheet, row_index, status_column)
+        _format_columns_by_index(worksheet, {4, 5}, '#,##0.00')
+
+    worksheet.freeze_panes = f"A{detail_header_row + 1}"
+    _auto_fit_columns(worksheet)
+
+
+def _write_audit_sheet(workbook: Any, audits: dict[str, Any], table_name: str) -> None:
+    worksheet = workbook.create_sheet(title="Audit")
+    section_specs = [
+        ("Audit dates", AUDIT_DATES_COLUMNS, audits.get("dates", [])),
+        ("Audit manquantes RCI", AUDIT_MISSING_RCI_COLUMNS, audits.get("missing_rci", [])),
+        ("Audit hors scope RCI", AUDIT_OUT_OF_SCOPE_COLUMNS, audits.get("out_of_scope_rci", [])),
+    ]
+    for section_name, columns, records in section_specs:
+        if worksheet.max_row > 1:
+            worksheet.append([])
+        section_row = worksheet.max_row + 1
+        worksheet.append([section_name])
+        worksheet.append(columns)
+        for record in records:
+            worksheet.append([_clean_cell_value(record.get(column)) for column in columns])
+        if not records:
+            worksheet.append(["Aucune donnée disponible."])
+        worksheet.cell(row=section_row, column=1).font = Font(bold=True, color="1F4E78")
+
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    header_font = Font(bold=True, color="FFFFFF")
+    for row in worksheet.iter_rows():
+        first_value = row[0].value
+        if first_value in {"Audit dates", "Audit manquantes RCI", "Audit hors scope RCI"}:
+            continue
+        if any(cell.value in AUDIT_DATES_COLUMNS + AUDIT_MISSING_RCI_COLUMNS + AUDIT_OUT_OF_SCOPE_COLUMNS for cell in row):
+            for cell in row:
+                if cell.value is None:
+                    continue
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    worksheet.freeze_panes = "A3"
+    worksheet.auto_filter.ref = f"A1:{get_column_letter(worksheet.max_column)}{max(worksheet.max_row, 1)}"
+    _format_columns_by_index(worksheet, {5, 6, 8}, '#,##0.00')
+    _auto_fit_columns(worksheet)
 
 
 def _dealer_summary_rows(records: list[dict[str, Any]]) -> list[list[Any]]:
@@ -458,21 +668,18 @@ def _format_special_sheet(worksheet: Any) -> None:
                 ):
                     for item in cell:
                         item.number_format = '#,##0.00'
-        elif worksheet.title == "Audit dates":
-            _format_columns_by_index(worksheet, {6}, '#,##0.00')
-            _format_columns_by_index(worksheet, {7}, '0.00%')
-        elif worksheet.title == "Audit manquantes RCI":
-            _format_columns_by_index(worksheet, {5, 8}, '#,##0.00')
-        elif worksheet.title == "Audit hors scope RCI":
-            _format_columns_by_index(worksheet, {5}, '#,##0.00')
-            _format_columns_by_index(worksheet, {8}, '0.00%')
-        elif worksheet.title == "RCI hors période":
-            _format_columns_by_index(worksheet, {4, 7}, '#,##0.00')
+        elif worksheet.title == "RCI PDF hors période":
+            _format_columns_by_index(worksheet, {5, 6, 10}, '#,##0.00')
+        elif worksheet.title == "Qualité référentiel RCI":
+            _format_columns_by_index(worksheet, {3}, '#,##0.00')
         return
 
     for row_index in range(2, worksheet.max_row + 1):
         label = worksheet.cell(row=row_index, column=1).value
         value_cell = worksheet.cell(row=row_index, column=2)
+        if label in {"Résultat du contrôle batch ERP vs batch RCI", "Informations complémentaires"}:
+            worksheet.cell(row=row_index, column=1).font = Font(bold=True, color="1F4E78")
+            continue
         if label in SUMMARY_MONEY_LABELS:
             value_cell.number_format = '#,##0.00'
         elif label in SUMMARY_PERCENT_LABELS:
@@ -510,6 +717,20 @@ def _apply_status_style(worksheet: Any, row_index: int, status_column: int) -> N
     status_cell = worksheet.cell(row=row_index, column=status_column)
     status_cell.fill = PatternFill("solid", fgColor=fill_color)
     status_cell.font = Font(color=font_color, bold=True)
+
+
+def _apply_severity_style(worksheet: Any, row_index: int, severity_column: int) -> None:
+    severity = worksheet.cell(row=row_index, column=severity_column).value
+    if not severity:
+        return
+    fill_color = SEVERITY_FILLS.get(str(severity))
+    font_color = SEVERITY_FONT_COLORS.get(str(severity), "000000")
+    if fill_color is None:
+        return
+
+    severity_cell = worksheet.cell(row=row_index, column=severity_column)
+    severity_cell.fill = PatternFill("solid", fgColor=fill_color)
+    severity_cell.font = Font(color=font_color, bold=True)
 
 
 def _auto_fit_columns(worksheet: Any) -> None:

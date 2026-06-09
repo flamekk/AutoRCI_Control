@@ -20,12 +20,14 @@ def test_send_report_email_dry_run_logs_planned_content(tmp_path, caplog) -> Non
     }
     summary = {
         "generated_at": "2026-05-20T12:00:00",
+        "erp_analyzed_invoices": 10,
         "reconciled_invoices": 10,
         "erp_matchable_invoices": 8,
         "out_of_scope_rci": 2,
         "matched_invoices": 7,
         "unmatched_erp": 2,
         "rci_out_of_period": 4,
+        "total_rci_pdf_out_of_period": 4,
         "gaps_detected": 3,
         "duplicates": 1,
         "total_impacted_amount": 125.5,
@@ -37,10 +39,11 @@ def test_send_report_email_dry_run_logs_planned_content(tmp_path, caplog) -> Non
 
     assert status == "dry_run"
     assert "[AutoRCI] Rapport quotidien de rapprochement ERP/RCI - 2026-05-20" in caplog.text
-    assert "Factures analysées : 10" in caplog.text
+    assert "Factures ERP analysées : 10" in caplog.text
     assert "Factures dans le périmètre RCI : 8" in caplog.text
     assert "Factures hors périmètre RCI : 2" in caplog.text
     assert "RCI hors période : 4" in caplog.text
+    assert "Total lignes RCI/PDF hors période : 4" in caplog.text
     assert "Écarts détectés : 3" in caplog.text
     assert "Montant impacté total : 125.50 MAD" in caplog.text
     assert "aucun flux RCI dans la période de rapprochement" in caplog.text
@@ -62,6 +65,7 @@ def test_send_report_returns_disabled_when_email_is_off(tmp_path) -> None:
 
 def test_send_report_email_sends_smtp_message(monkeypatch, tmp_path) -> None:
     sent_messages = []
+    events = []
 
     class FakeSMTP:
         def __init__(self, host, port, timeout):
@@ -70,6 +74,7 @@ def test_send_report_email_sends_smtp_message(monkeypatch, tmp_path) -> None:
             self.timeout = timeout
             self.started_tls = False
             self.logged_in = None
+            events.append(("connect", host, port))
 
         def __enter__(self):
             return self
@@ -79,15 +84,18 @@ def test_send_report_email_sends_smtp_message(monkeypatch, tmp_path) -> None:
 
         def starttls(self):
             self.started_tls = True
+            events.append(("starttls",))
 
         def login(self, username, password):
             self.logged_in = (username, password)
+            events.append(("login", username, password))
 
         def send_message(self, message):
+            events.append(("send_message",))
             sent_messages.append(message)
 
     monkeypatch.setattr("src.email_sender.smtplib.SMTP", FakeSMTP)
-    monkeypatch.setenv("AUTORCI_SMTP_PASSWORD", "secret")
+    monkeypatch.setenv("AUTORCI_EMAIL_PASSWORD", "secret")
 
     report_path = tmp_path / "Rapport_Reconciliation_RCI_2026-05-20_1200.xlsx"
     report_path.write_bytes(b"fake workbook")
@@ -98,7 +106,7 @@ def test_send_report_email_sends_smtp_message(monkeypatch, tmp_path) -> None:
             "recipients": "facturation@example.com;finance@example.com",
             "smtp_host": "smtp.example.com",
             "smtp_port": 587,
-            "smtp_username": "autorcicontrol",
+            "username": "autorcicontrol",
             "use_tls": True,
         }
     }
@@ -111,10 +119,155 @@ def test_send_report_email_sends_smtp_message(monkeypatch, tmp_path) -> None:
     )
 
     assert status == "sent"
+    assert events[:4] == [
+        ("connect", "smtp.example.com", 587),
+        ("starttls",),
+        ("login", "autorcicontrol", "secret"),
+        ("send_message",),
+    ]
     assert len(sent_messages) == 1
     message = sent_messages[0]
     assert message["Subject"] == "[AutoRCI] Rapport quotidien de rapprochement ERP/RCI - 2026-05-20"
     assert message["To"] == "facturation@example.com, finance@example.com"
+
+
+def test_send_report_email_uses_sender_as_username_fallback(monkeypatch, tmp_path) -> None:
+    events = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            self.host = host
+            self.port = port
+            self.timeout = timeout
+            events.append(("connect", host, port))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def starttls(self):
+            events.append(("starttls",))
+
+        def login(self, username, password):
+            events.append(("login", username, password))
+
+        def send_message(self, message):
+            events.append(("send_message", message["From"]))
+
+    monkeypatch.setattr("src.email_sender.smtplib.SMTP", FakeSMTP)
+    monkeypatch.setenv("AUTORCI_EMAIL_PASSWORD", "secret")
+
+    report_path = tmp_path / "Rapport_Reconciliation_RCI_2026-05-20_1200.xlsx"
+    report_path.write_bytes(b"fake workbook")
+    config = {
+        "email": {
+            "enabled": True,
+            "sender": "autorcicontrol@example.com",
+            "recipients": ["facturation@example.com"],
+            "smtp_server": "smtp.example.com",
+            "smtp_port": 587,
+            "use_tls": True,
+        }
+    }
+
+    status = _send_report_email(
+        {"generated_at": "2026-05-20T12:00:00"},
+        report_path,
+        dry_run=False,
+        config=config,
+    )
+
+    assert status == "sent"
+    assert ("connect", "smtp.example.com", 587) in events
+    assert ("login", "autorcicontrol@example.com", "secret") in events
+
+
+def test_send_report_email_uses_configured_password_env_var(monkeypatch, tmp_path) -> None:
+    events = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def starttls(self):
+            pass
+
+        def login(self, username, password):
+            events.append(("login", username, password))
+
+        def send_message(self, message):
+            events.append(("send_message",))
+
+    monkeypatch.setattr("src.email_sender.smtplib.SMTP", FakeSMTP)
+    monkeypatch.delenv("AUTORCI_EMAIL_PASSWORD", raising=False)
+    monkeypatch.setenv("AUTORCI_TEST_EMAIL_PASSWORD", "configured-secret")
+
+    report_path = tmp_path / "Rapport_Reconciliation_RCI_2026-05-20_1200.xlsx"
+    report_path.write_bytes(b"fake workbook")
+    config = {
+        "email": {
+            "enabled": True,
+            "sender": "autorcicontrol@example.com",
+            "username": "smtp-user@example.com",
+            "recipients": ["facturation@example.com"],
+            "smtp_host": "smtp.example.com",
+            "password_env_var": "AUTORCI_TEST_EMAIL_PASSWORD",
+            "use_tls": True,
+        }
+    }
+
+    status = _send_report_email(
+        {"generated_at": "2026-05-20T12:00:00"},
+        report_path,
+        dry_run=False,
+        config=config,
+    )
+
+    assert status == "sent"
+    assert ("login", "smtp-user@example.com", "configured-secret") in events
+
+
+def test_send_report_email_missing_password_returns_configuration_error(monkeypatch, tmp_path) -> None:
+    smtp_called = {"value": False}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            smtp_called["value"] = True
+
+    monkeypatch.setattr("src.email_sender.smtplib.SMTP", FakeSMTP)
+    monkeypatch.delenv("AUTORCI_EMAIL_PASSWORD", raising=False)
+    monkeypatch.delenv("AUTORCI_SMTP_PASSWORD", raising=False)
+
+    report_path = tmp_path / "Rapport_Reconciliation_RCI_2026-05-20_1200.xlsx"
+    report_path.write_bytes(b"fake workbook")
+    config = {
+        "email": {
+            "enabled": True,
+            "sender": "autorcicontrol@example.com",
+            "username": "autorcicontrol@example.com",
+            "recipients": ["facturation@example.com"],
+            "smtp_host": "smtp.example.com",
+            "password_env_var": "AUTORCI_MISSING_EMAIL_PASSWORD",
+        }
+    }
+
+    status = _send_report_email(
+        {"generated_at": "2026-05-20T12:00:00"},
+        report_path,
+        dry_run=False,
+        config=config,
+    )
+
+    assert status == "configuration_error"
+    assert smtp_called["value"] is False
 
 
 def test_send_report_missing_attachment() -> None:

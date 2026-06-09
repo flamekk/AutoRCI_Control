@@ -72,6 +72,8 @@ Aucun nom de fichier n'est code en dur. Le systeme detecte automatiquement les f
 
 En execution reelle, les fichiers traites depuis `input/` peuvent etre deplaces vers `archive/` apres succes, sauf si l'option `--dry-run` est utilisee.
 
+Pour tester un envoi email reel sans deplacer les fichiers `input/`, utiliser `--no-archive`.
+
 ## Installation
 
 Depuis le dossier du projet :
@@ -94,6 +96,7 @@ Elle permet de :
 - deposer les fichiers ERP, RCI, PDF et le referentiel RCI ;
 - lancer une reconciliation en `dry-run` ou en execution reelle ;
 - filtrer les resultats et les ecarts ;
+- consulter le plan d'action par severite et les suggestions de qualite du referentiel RCI ;
 - telecharger les rapports, exports Power BI, anomalies et logs ;
 - lire le dernier log d'execution.
 
@@ -149,6 +152,14 @@ python src/main.py --dry-run
 
 `--dry-run` execute les controles et genere les sorties, mais n'envoie pas d'email et n'archive pas les fichiers.
 
+Pour executer le traitement normalement, avec envoi email si la configuration SMTP est active, mais sans archiver les fichiers sources :
+
+```powershell
+python src/main.py --no-archive
+```
+
+`--no-archive` n'active pas le mode test : les rapports sont generes et l'email peut etre envoye si `email.enabled=true`. Seul le deplacement des fichiers `input/` vers `archive/` est desactive.
+
 Options de diagnostic utiles :
 
 ```powershell
@@ -186,7 +197,13 @@ Le classeur contient :
 - `Factures manquantes RCI` : factures presentes ERP mais absentes RCI/PDF ;
 - `Anomalies` : anomalies de montant ou de date ;
 - `Doublons` : factures detectees plusieurs fois ;
+- `Plan action` : ecarts tries par severite et montant impacte ;
+- `Batch correctif` : synthese du batch correctif candidat, chemin des fichiers, volume, montant et avertissement de validation ;
 - `RCI seulement` : factures presentes cote RCI/PDF mais absentes ERP ;
+- `RCI hors periode` : lignes RCI/PDF chargees mais hors periode de rapprochement ;
+- `Hors scope RCI` : factures ERP hors referentiel de couverture RCI ;
+- `Audit dates`, `Audit manquantes RCI`, `Audit hors scope RCI` : controles de coherence ;
+- `Qualite referentiel RCI` : clients hors scope a verifier dans le referentiel ;
 - `Synthese par concessionnaire` : vision par client/concessionnaire.
 
 Les statuts sont colores :
@@ -225,6 +242,8 @@ Colonnes principales :
 - `origin`
 - `status`
 - `priority`
+- `severity`
+- `included_in_corrective_batch`
 - `action_recommandee`
 
 Ce fichier permet de construire un dashboard Power BI avec :
@@ -235,6 +254,23 @@ Ce fichier permet de construire un dashboard Power BI avec :
 - taux de rapprochement ;
 - evolution par jour ;
 - top concessionnaires avec ecarts.
+
+## Batch Correctif Candidat
+
+AutoRCI genere, quand des factures `MANQUANTE_RCI` sont classees `CRITIQUE` ou `ELEVEE`, deux fichiers dans :
+
+```text
+output/corrections/
+```
+
+Fichiers generes :
+
+- `batch_correctif_candidat_YYYYMMDD_HHMMSS.txt`
+- `batch_correctif_candidat_YYYYMMDD_HHMMSS_control.csv`
+
+Le batch candidat contient uniquement les factures `MANQUANTE_RCI` dont la severite est `CRITIQUE` ou `ELEVEE`. Les factures `HORS_SCOPE_RCI`, `RCI_HORS_PERIODE` et les ecarts moyens ne sont pas inclus.
+
+Important : ce fichier est un candidat a valider par l'equipe facturation avant transmission a RCI. Il n'est jamais joint automatiquement a l'email.
 
 ## Configuration Email
 
@@ -250,12 +286,12 @@ Exemple :
 email:
   enabled: true
   sender: "autorcicontrol@entreprise.com"
+  username: "autorcicontrol@entreprise.com"
   recipients:
     - "facturation@entreprise.com"
   smtp_host: "smtp.entreprise.com"
   smtp_port: 587
-  smtp_username: "autorcicontrol"
-  smtp_password_env_var: "AUTORCI_SMTP_PASSWORD"
+  password_env_var: "AUTORCI_EMAIL_PASSWORD"
   use_tls: true
   use_ssl: false
 ```
@@ -265,8 +301,10 @@ Le mot de passe SMTP ne doit jamais etre ecrit dans le code ni dans le depot.
 Definir le mot de passe dans une variable d'environnement Windows :
 
 ```powershell
-setx AUTORCI_SMTP_PASSWORD "mot_de_passe_smtp"
+setx AUTORCI_EMAIL_PASSWORD "mot_de_passe_smtp"
 ```
+
+Pour Gmail, utilisez un mot de passe d'application et renseignez `username` avec l'adresse Gmail emettrice. Si `username` est absent, AutoRCI utilise `sender` comme identifiant SMTP.
 
 En mode `--dry-run`, aucun email n'est envoye. Le sujet, le corps et la piece jointe prevus sont seulement affiches dans les logs.
 

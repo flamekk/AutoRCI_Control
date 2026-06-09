@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Historique - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Historique des traitements</h1>
+    <p class="text-muted mb-0">Suivi de l’évolution des écarts, des montants impactés et du taux de rapprochement.</p>
+  </div>
+  <div class="source-pill">
+    {% if source_file %}Source : {{ source_file.name }}{% else %}Historique non disponible{% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12">
+    <div class="panel chart-panel chart-panel-tall">
+      <div class="chart-header">
+        <h2><i class="bi bi-graph-up-arrow me-2"></i>Évolution du montant impacté</h2>
+        <p>Somme quotidienne des montants impactés sur l’historique Power BI.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_history_charts') }}" data-chart-key="impacted_amount_trend" data-chart-type="line" data-chart-format="money"></canvas>
+        <div class="chart-empty d-none">Aucun historique de montant disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-6">
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <h2><i class="bi bi-exclamation-octagon me-2"></i>Nombre d’écarts détectés</h2>
+        <p>Évolution des lignes MANQUANTE_RCI, RCI_SEULEMENT, anomalies et doublons.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_history_charts') }}" data-chart-key="gap_count_trend" data-chart-type="line"></canvas>
+        <div class="chart-empty d-none">Aucun écart historique disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-6">
+    <div class="panel chart-panel">
+      <div class="chart-header">
+        <h2><i class="bi bi-speedometer2 me-2"></i>Taux de rapprochement</h2>
+        <p>Rapport OK / factures dans le périmètre RCI par date de traitement.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_history_charts') }}" data-chart-key="matching_rate_trend" data-chart-type="line" data-chart-format="percent"></canvas>
+        <div class="chart-empty d-none">Aucun taux historique disponible.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not source_file %}
+  <div class="empty-state mt-3">
+    <i class="bi bi-clock-history empty-state-icon"></i>
+    <span>Aucun fichier historique disponible. Lancez un traitement pour alimenter output/powerbi/reconciliation_history.csv.</span>
+  </div>
+{% endif %}
+{% endblock %}

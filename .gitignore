@@ -11,6 +11,8 @@ logs/*
 
 output/anomalies/*
 !output/anomalies/.gitkeep
+output/corrections/*
+!output/corrections/.gitkeep
 output/powerbi/*
 !output/powerbi/.gitkeep
 output/reports/*

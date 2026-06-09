@@ -12,18 +12,23 @@
   <nav class="navbar navbar-expand-lg navbar-dark app-navbar sticky-top">
     <div class="container-fluid">
       <a class="navbar-brand fw-semibold" href="{{ url_for('dashboard') }}">
-        <i class="bi bi-diagram-3-fill me-2"></i>AutoRCI Control
+        <span class="brand-icon"><i class="bi bi-diagram-3-fill"></i></span>
+        <span>AutoRCI Control</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="mainNav">
         <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><i class="bi bi-grid-1x2 me-1"></i>Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}"><i class="bi bi-grid-1x2 me-1"></i>Tableau de bord</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'upload' %}active{% endif %}" href="{{ url_for('upload') }}"><i class="bi bi-cloud-arrow-up me-1"></i>Dépôt fichiers</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'run' %}active{% endif %}" href="{{ url_for('run') }}"><i class="bi bi-play-circle me-1"></i>Lancer traitement</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'results' %}active{% endif %}" href="{{ url_for('results') }}"><i class="bi bi-table me-1"></i>Résultats</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'details' %}active{% endif %}" href="{{ url_for('details') }}"><i class="bi bi-exclamation-diamond me-1"></i>Écarts</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'factures_absentes' %}active{% endif %}" href="{{ url_for('factures_absentes') }}"><i class="bi bi-receipt-cutoff me-1"></i>Factures absentes</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'action_plan' %}active{% endif %}" href="{{ url_for('action_plan') }}"><i class="bi bi-list-check me-1"></i>Plan d’action</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="bi bi-graph-up-arrow me-1"></i>Historique</a></li>
+          <li class="nav-item"><a class="nav-link {% if active_page == 'reference_quality' %}active{% endif %}" href="{{ url_for('reference_quality') }}"><i class="bi bi-shield-check me-1"></i>Qualité référentiel</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'downloads' %}active{% endif %}" href="{{ url_for('downloads') }}"><i class="bi bi-download me-1"></i>Téléchargements</a></li>
           <li class="nav-item"><a class="nav-link {% if active_page == 'logs' %}active{% endif %}" href="{{ url_for('logs') }}"><i class="bi bi-terminal me-1"></i>Logs</a></li>
         </ul>
@@ -49,6 +54,8 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/charts.js', v='20260608_2') }}"></script>
 </body>
 </html>

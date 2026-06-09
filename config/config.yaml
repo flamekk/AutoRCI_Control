@@ -11,6 +11,7 @@ paths:
   reports_dir: "output/reports"
   powerbi_dir: "output/powerbi"
   anomalies_dir: "output/anomalies"
+  corrections_dir: "output/corrections"
 
 file_detection:
   extensions:
@@ -43,12 +44,13 @@ reference:
     path: reference
 
 email:
-  enabled: false
-  sender: ""
-  recipients: []
-  smtp_host: ""
-  smtp_port: 587
-  smtp_username: ""
-  smtp_password_env_var: "AUTORCI_SMTP_PASSWORD"
-  use_tls: true
-  use_ssl: false
+  enabled: true
+  smtp_host: "sandbox.smtp.mailtrap.io"
+  smtp_server: "sandbox.smtp.mailtrap.io"
+  smtp_port: 2525
+  sender: "autorcicontrol@test.local"
+  username: "23eca10440199b"
+  recipients:
+    - "hibahb132@gmail.com"
+  use_tls: false
+  password_env_var: "AUTORCI_EMAIL_PASSWORD"

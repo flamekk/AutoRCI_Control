@@ -132,6 +132,8 @@ def apply_reconciliation_date_filter(
     LOGGER.info("PDF exclu par periode: %s ligne(s).", len(pdf_out_of_period))
     if summary["no_rci_flux_in_period_alert"]:
         LOGGER.warning("Attention : aucun flux RCI dans la période de rapprochement.")
+    if summary["pdf_period_mismatch_alert"]:
+        LOGGER.warning("Attention : les PDF chargés ne correspondent pas à la période du flux RCI.")
     return DateFilterResult(
         filtered_erp,
         filtered_rci,
@@ -164,18 +166,31 @@ def _resolve_period(
     if mode != "auto":
         raise ValueError(f"Mode de filtre date non supporte: {mode}")
 
-    source_dates = [
-        *_dates_from_column(rci, "rci_date"),
-        *_dates_from_column(pdf, "pdf_invoice_date"),
-    ]
-    if source_dates:
+    rci_dates = _dates_from_column(rci, "rci_date")
+    if rci_dates:
         days_before = _int_config(config, "days_before", 3)
         days_after = _int_config(config, "days_after", 1)
         return (
-            min(source_dates) - timedelta(days=days_before),
-            max(source_dates) + timedelta(days=days_after),
+            min(rci_dates) - timedelta(days=days_before),
+            max(rci_dates) + timedelta(days=days_after),
             "auto",
-            "rci_pdf",
+            "rci_txt",
+        )
+
+    pdf_dates = _dates_from_column(pdf, "pdf_invoice_date")
+    if pdf_dates and rci.empty:
+        days_before = _int_config(config, "days_before", 3)
+        days_after = _int_config(config, "days_after", 1)
+        return (
+            min(pdf_dates) - timedelta(days=days_before),
+            max(pdf_dates) + timedelta(days=days_after),
+            "auto",
+            "pdf",
+        )
+
+    if pdf_dates and not rci.empty:
+        LOGGER.warning(
+            "Dates RCI non fiables ou absentes: les PDF ne sont pas utilises pour elargir automatiquement la periode RCI."
         )
 
     erp_dates = _dates_from_column(erp, "erp_date")
@@ -238,7 +253,13 @@ def _summary(
         "rci_pdf_rows_excluded_by_date": rci_pdf_before_count - rci_pdf_after_count,
         "rci_rows_missing_date_kept": rci_missing_date_count,
         "pdf_rows_missing_date_kept": pdf_missing_date_count,
-        "no_rci_flux_in_period_alert": bool(enabled and rci_pdf_before_count > 0 and rci_pdf_after_count == 0),
+        "no_rci_flux_in_period_alert": bool(enabled and rci_before_count > 0 and rci_after_count == 0),
+        "pdf_period_mismatch_alert": bool(
+            enabled
+            and source == "rci_txt"
+            and pdf_before_count > 0
+            and pdf_before_count > pdf_after_count
+        ),
     }
 
 

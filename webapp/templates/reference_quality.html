@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Qualité référentiel - AutoRCI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Qualité référentiel RCI</h1>
+    <p class="text-muted mb-0">Analyse des concessionnaires hors périmètre pour aider à fiabiliser le référentiel RCI.</p>
+  </div>
+  <div class="source-pill">
+    {% if source_file %}Source : {{ source_file.name }}{% else %}Aucune source disponible{% endif %}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-xl-6">
+    <div class="panel chart-panel chart-panel-tall">
+      <div class="chart-header">
+        <h2><i class="bi bi-list-ol me-2"></i>Hors scope par nombre de lignes</h2>
+        <p>Top concessionnaires à vérifier selon le volume de factures hors périmètre.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_reference_quality_charts') }}" data-chart-key="top_out_scope_count" data-chart-type="bar" data-chart-axis="y"></canvas>
+        <div class="chart-empty d-none">Aucun concessionnaire hors scope disponible.</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-6">
+    <div class="panel chart-panel chart-panel-tall">
+      <div class="chart-header">
+        <h2><i class="bi bi-cash-stack me-2"></i>Hors scope par montant ERP</h2>
+        <p>Priorisation financière des clients à rapprocher du référentiel RCI.</p>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas data-chart-endpoint="{{ url_for('api_reference_quality_charts') }}" data-chart-key="top_out_scope_amount" data-chart-type="bar" data-chart-axis="y" data-chart-format="money"></canvas>
+        <div class="chart-empty d-none">Aucun montant hors scope disponible.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel reference-quality-panel">
+  <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-shield-check me-2"></i>Suggestions de contrôle</h2>
+      <p class="text-muted mb-0">Liste issue du dernier fichier reference_suggestions ou du dernier rapprochement disponible.</p>
+    </div>
+    <span class="badge text-bg-secondary">{{ reference_suggestions|length }} client(s)</span>
+  </div>
+  {% if reference_suggestions %}
+    <div class="table-responsive">
+      <table class="table table-striped table-hover table-sm align-middle data-table">
+        <thead>
+          <tr>
+            <th>customer_name</th>
+            <th>nombre_factures</th>
+            <th>montant_total_erp</th>
+            <th>closest_reference_name</th>
+            <th>closest_reference_similarity</th>
+            <th>suggestion_action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in reference_suggestions %}
+            <tr>
+              <td>{{ row.get("customer_name", "") }}</td>
+              <td>{{ row.get("nombre_factures", "")|number }}</td>
+              <td class="text-end">{{ row.get("montant_total_erp", "")|mad }}</td>
+              <td>{{ row.get("closest_reference_name", "") }}</td>
+              <td>{{ row.get("closest_reference_similarity", "") }}</td>
+              <td>{{ row.get("suggestion_action", "") }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-shield-check empty-state-icon"></i>
+      <span>Aucune suggestion référentiel disponible. Lancez un traitement pour générer l’audit hors périmètre RCI.</span>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

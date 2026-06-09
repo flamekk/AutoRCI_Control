@@ -15,6 +15,8 @@
               {% for column in columns %}
                 {% if column == "status" %}
                   <td><span class="badge status-badge text-bg-{{ status_badge_class(row.get(column)) }}">{{ row.get(column, "") }}</span></td>
+                {% elif column == "severity" %}
+                  <td><span class="badge status-badge text-bg-{{ severity_badge_class(row.get(column)) }}">{{ row.get(column, "") }}</span></td>
                 {% elif column in ["amount_erp", "amount_rci", "amount_pdf", "amount_gap", "montant_impacte"] %}
                   <td class="text-end">{{ row.get(column)|mad }}</td>
                 {% else %}
@@ -27,6 +29,9 @@
       </table>
     </div>
   {% else %}
-    <div class="empty-state">Aucune ligne a afficher.</div>
+    <div class="empty-state">
+      <i class="bi bi-table empty-state-icon"></i>
+      <span>Aucune ligne à afficher avec les filtres sélectionnés.</span>
+    </div>
   {% endif %}
 </div>

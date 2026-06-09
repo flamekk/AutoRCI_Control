@@ -18,7 +18,8 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - used when runni
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_PASSWORD_ENV_VAR = "AUTORCI_SMTP_PASSWORD"
+DEFAULT_PASSWORD_ENV_VAR = "AUTORCI_EMAIL_PASSWORD"
+LEGACY_PASSWORD_ENV_VAR = "AUTORCI_SMTP_PASSWORD"
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ def _send_report_email(
         LOGGER.info("Email desactive dans la configuration.")
         return "disabled"
 
+    _log_smtp_settings(settings)
     validation_error = _validate_settings(settings, report_path)
     if validation_error is not None:
         LOGGER.error(validation_error)
@@ -94,24 +96,36 @@ def _send_report_email(
 
 def _load_email_settings(config: dict[str, Any]) -> EmailSettings:
     email_config = config.get("email", {})
-    password_env_var = _env("AUTORCI_SMTP_PASSWORD_ENV_VAR") or str(
-        email_config.get("smtp_password_env_var") or DEFAULT_PASSWORD_ENV_VAR
+    sender = _env("AUTORCI_EMAIL_SENDER") or str(email_config.get("sender") or "")
+    password_env_var = _env("AUTORCI_EMAIL_PASSWORD_ENV_VAR") or _env("AUTORCI_SMTP_PASSWORD_ENV_VAR") or str(
+        email_config.get("password_env_var")
+        or email_config.get("smtp_password_env_var")
+        or DEFAULT_PASSWORD_ENV_VAR
     )
-    password = _env("AUTORCI_SMTP_PASSWORD") or os.getenv(password_env_var)
+    password = _env_from_name(password_env_var) or _env(DEFAULT_PASSWORD_ENV_VAR) or _env(LEGACY_PASSWORD_ENV_VAR)
+    smtp_host = (
+        _env("AUTORCI_SMTP_HOST")
+        or _env("AUTORCI_EMAIL_SMTP_HOST")
+        or str(email_config.get("smtp_host") or email_config.get("smtp_server") or "")
+    )
+    smtp_username = (
+        _env("AUTORCI_EMAIL_USERNAME")
+        or _env("AUTORCI_SMTP_USERNAME")
+        or _env("AUTORCI_SMTP_USER")
+        or str(email_config.get("username") or email_config.get("smtp_username") or sender or "")
+    )
 
     return EmailSettings(
         enabled=_env_bool("AUTORCI_EMAIL_ENABLED", email_config.get("enabled", False)),
-        sender=_env("AUTORCI_EMAIL_SENDER") or str(email_config.get("sender") or ""),
+        sender=sender,
         recipients=_recipients(
             _env("AUTORCI_EMAIL_RECIPIENTS")
             or _env("AUTORCI_EMAIL_TO")
             or email_config.get("recipients", [])
         ),
-        smtp_host=_env("AUTORCI_SMTP_HOST") or str(email_config.get("smtp_host") or ""),
+        smtp_host=smtp_host,
         smtp_port=int(_env("AUTORCI_SMTP_PORT") or email_config.get("smtp_port") or 587),
-        smtp_username=_env("AUTORCI_SMTP_USERNAME")
-        or _env("AUTORCI_SMTP_USER")
-        or str(email_config.get("smtp_username") or ""),
+        smtp_username=smtp_username,
         smtp_password=password,
         use_tls=_env_bool("AUTORCI_SMTP_USE_TLS", email_config.get("use_tls", True)),
         use_ssl=_env_bool("AUTORCI_SMTP_USE_SSL", email_config.get("use_ssl", False)),
@@ -127,9 +141,19 @@ def _validate_settings(settings: EmailSettings, report_path: Path) -> str | None
         return "Email non envoye: aucun destinataire configure."
     if not settings.smtp_host:
         return "Email non envoye: smtp_host manquant."
-    if settings.smtp_username and not settings.smtp_password:
+    if not settings.smtp_username:
+        return "Email non envoye: username SMTP manquant."
+    if not settings.smtp_password:
         return "Email non envoye: mot de passe SMTP manquant dans la variable d'environnement."
     return None
+
+
+def _log_smtp_settings(settings: EmailSettings) -> None:
+    LOGGER.info("SMTP host: %s", settings.smtp_host or "(manquant)")
+    LOGGER.info("SMTP port: %s", settings.smtp_port)
+    LOGGER.info("SMTP TLS active: %s", "oui" if settings.use_tls else "non")
+    LOGGER.info("SMTP username present: %s", "oui" if bool(settings.smtp_username) else "non")
+    LOGGER.info("SMTP password present: %s", "oui" if bool(settings.smtp_password) else "non")
 
 
 def _build_message(
@@ -166,14 +190,27 @@ def _send_smtp_message(settings: EmailSettings, message: EmailMessage) -> None:
 
 
 def _build_email_body(summary: dict[str, Any]) -> str:
-    analyzed = _summary_int(summary, "reconciled_invoices", "erp_rows")
+    analyzed = _summary_int(summary, "erp_analyzed_invoices", "reconciled_invoices", "erp_rows")
     in_scope = _summary_int(summary, "erp_matchable_invoices")
     out_of_scope = _summary_int(summary, "out_of_scope_rci", "status_hors_scope_rci")
     ok = _summary_int(summary, "matched_invoices", "status_ok")
     missing = _summary_int(summary, "unmatched_erp", "status_manquante_rci")
+    missing_invoices = _summary_int(summary, "missing_rci_invoice_count")
+    missing_credit_notes = _summary_int(summary, "missing_rci_credit_note_count")
+    missing_total_amount = _summary_float(summary, "missing_rci_total_amount", "missing_rci_amount")
     rci_out_of_period = _summary_int(summary, "rci_out_of_period", "status_rci_hors_periode")
+    total_rci_pdf_out_of_period = _summary_int(
+        summary,
+        "total_rci_pdf_out_of_period",
+        "rci_pdf_rows_excluded_by_date",
+        "rci_out_of_period",
+        "status_rci_hors_periode",
+    )
     gaps_detected = _summary_int(summary, "gaps_detected", "anomalies")
     total_impacted = _summary_float(summary, "total_impacted_amount", "total_amount_gap")
+    corrective_batch_generated = _summary_bool(summary, "corrective_batch_generated")
+    corrective_batch_count = _summary_int(summary, "corrective_batch_invoice_count")
+    corrective_batch_amount = _summary_float(summary, "corrective_batch_total_amount")
     no_rci_alert = _summary_bool(summary, "no_rci_flux_in_period_alert")
     no_rci_alert_text = (
         "Alerte : aucun flux RCI dans la période de rapprochement.\n\n"
@@ -194,14 +231,23 @@ def _build_email_body(summary: dict[str, Any]) -> str:
         "Bonjour,\n\n"
         "Le contrôle automatique ERP Navision / RCI Banque a été exécuté.\n\n"
         "Synthèse :\n"
-        f"- Factures analysées : {analyzed}\n"
+        f"- Factures ERP analysées : {analyzed}\n"
         f"- Factures dans le périmètre RCI : {in_scope}\n"
         f"- Factures hors périmètre RCI : {out_of_scope}\n"
         f"- Factures OK : {ok}\n"
         f"- Factures manquantes RCI : {missing}\n"
+        f"- Factures absentes RCI : {missing_invoices}\n"
+        f"- Avoirs absents RCI : {missing_credit_notes}\n"
+        f"- Montant total absent RCI : {missing_total_amount:,.2f} MAD\n"
         f"- RCI hors période : {rci_out_of_period}\n"
+        f"- Total lignes RCI/PDF hors période : {total_rci_pdf_out_of_period}\n"
         f"- Écarts détectés : {gaps_detected}\n"
         f"- Montant impacté total : {total_impacted:,.2f} MAD\n\n"
+        "Batch correctif candidat :\n"
+        f"- Généré : {'Oui' if corrective_batch_generated else 'Non'}\n"
+        f"- Factures incluses : {corrective_batch_count}\n"
+        f"- Montant total : {corrective_batch_amount:,.2f} MAD\n"
+        "- Le batch correctif n'est pas joint automatiquement et doit être validé par l'équipe facturation avant transmission à RCI.\n\n"
         f"{no_rci_alert_text}"
         "Le rapport détaillé est disponible en pièce jointe.\n\n"
         "Cordialement,\n"
@@ -284,6 +330,12 @@ def _env(name: str) -> str | None:
     if value is None or value.strip() == "":
         return None
     return value.strip()
+
+
+def _env_from_name(name: str | None) -> str | None:
+    if not name:
+        return None
+    return _env(str(name))
 
 
 def _env_bool(name: str, default: Any) -> bool:

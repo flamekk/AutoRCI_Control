@@ -1,0 +1,15 @@
+paths:
+  input_root: input
+  samples_root: samples
+  reference_root: reference
+  output_root: output
+  archive_root: archive
+  logs_root: logs
+  reports_dir: output/reports
+  powerbi_dir: output/powerbi
+  anomalies_dir: output/anomalies
+processing:
+  archive_after_success: true
+  output_reports: true
+email:
+  enabled: false

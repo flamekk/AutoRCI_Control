@@ -9,7 +9,7 @@
       {% if source_file %}Source : {{ source_file.name }}{% else %}Aucun fichier de rapprochement disponible{% endif %}
     </p>
   </div>
-  <div class="badge text-bg-light">{{ rows|length }} ligne(s)</div>
+  <div class="source-pill">{{ rows|length }} ligne(s)</div>
 </div>
 
 {% include "_filters.html" %}

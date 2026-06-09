@@ -39,6 +39,16 @@ def _rci(invoice: str, amount: float, rci_date: str) -> dict[str, object]:
     }
 
 
+def _pdf(invoice: str, amount: float, pdf_invoice_date: str) -> dict[str, object]:
+    return {
+        "source_file": "rci.pdf",
+        "invoice_number": invoice,
+        "document_type": "FACTURE",
+        "amount_pdf": amount,
+        "pdf_invoice_date": pdf_invoice_date,
+    }
+
+
 def test_date_filter_reduces_erp_rows() -> None:
     erp = pd.DataFrame(
         [
@@ -133,3 +143,27 @@ def test_date_filter_applies_to_rci_and_keeps_out_of_period_separately() -> None
     assert result.summary["rci_rows_after_date_filter"] == 0
     assert result.summary["rci_rows_excluded_by_date"] == 1
     assert result.summary["no_rci_flux_in_period_alert"] is True
+
+
+def test_auto_date_filter_prioritizes_rci_txt_over_pdf_dates() -> None:
+    erp = pd.DataFrame(
+        [
+            _erp("VF1000", 100.0, "2026-04-29"),
+            _erp("VF1001", 200.0, "2026-05-04"),
+        ]
+    )
+    rci = pd.DataFrame([_rci("VF1000", 100.0, "2026-04-29")])
+    pdf = pd.DataFrame([_pdf("VF1001", 200.0, "2026-05-04")])
+
+    result = apply_reconciliation_date_filter(
+        erp,
+        rci,
+        pdf,
+        {"enabled": True, "mode": "auto", "days_before": 0, "days_after": 0},
+    )
+
+    assert result.summary["date_filter_source"] == "rci_txt"
+    assert result.summary["reconciliation_period"] == "2026-04-29 -> 2026-04-29"
+    assert set(result.erp_records["invoice_number"]) == {"VF1000"}
+    assert len(result.pdf_out_of_period_records) == 1
+    assert result.summary["pdf_period_mismatch_alert"] is True

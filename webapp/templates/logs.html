@@ -13,7 +13,12 @@
 <div class="panel">
   {% if log_file %}
     <span class="badge text-bg-light log-file-badge"><i class="bi bi-file-earmark-text me-1"></i>{{ log_file.name }}</span>
+    <pre class="log-box log-full">{{ content or "Aucun contenu à afficher." }}</pre>
+  {% else %}
+    <div class="empty-state">
+      <i class="bi bi-terminal empty-state-icon"></i>
+      <span>Aucun log disponible. Lancez un traitement pour générer un journal d’exécution.</span>
+    </div>
   {% endif %}
-  <pre class="log-box log-full">{{ content or "Aucun contenu a afficher." }}</pre>
 </div>
 {% endblock %}

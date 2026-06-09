@@ -10,7 +10,9 @@ from typing import Any
 
 try:
     from src.audit import enrich_report_with_audits
+    from src.action_plan import build_reference_suggestions, write_reference_suggestions
     from src.config import ensure_project_structure, get_project_root, load_config
+    from src.corrective_batch import write_corrective_batch_outputs
     from src.date_filter import apply_reconciliation_date_filter
     from src.debug_matching import log_debug_invoice, log_invoice_presence, write_matching_debug
     from src.email_sender import send_report
@@ -18,6 +20,7 @@ try:
     from src.extract_pdf import extract_pdf_files
     from src.extract_rci import extract_rci_files
     from src.file_detector import SOURCE_TYPES, FileInventory, detect_files
+    from src.missing_rci import write_missing_rci_export
     from src.powerbi_export import write_powerbi_exports
     from src.reference_loader import (
         enrich_erp_with_rci_coverage,
@@ -28,7 +31,9 @@ try:
     from src.report_excel import write_excel_report
 except ModuleNotFoundError:  # pragma: no cover - used when running python src/main.py.
     from audit import enrich_report_with_audits
+    from action_plan import build_reference_suggestions, write_reference_suggestions
     from config import ensure_project_structure, get_project_root, load_config
+    from corrective_batch import write_corrective_batch_outputs
     from date_filter import apply_reconciliation_date_filter
     from debug_matching import log_debug_invoice, log_invoice_presence, write_matching_debug
     from email_sender import send_report
@@ -36,6 +41,7 @@ except ModuleNotFoundError:  # pragma: no cover - used when running python src/m
     from extract_pdf import extract_pdf_files
     from extract_rci import extract_rci_files
     from file_detector import SOURCE_TYPES, FileInventory, detect_files
+    from missing_rci import write_missing_rci_export
     from powerbi_export import write_powerbi_exports
     from reference_loader import enrich_erp_with_rci_coverage, inspect_reference_file, load_rci_coverage_reference
     from reconcile import reconcile
@@ -62,6 +68,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="N'envoie pas d'email et n'archive pas les fichiers source.",
+    )
+    parser.add_argument(
+        "--no-archive",
+        action="store_true",
+        help="Execute le traitement reel sans archiver les fichiers input apres succes.",
     )
     parser.add_argument(
         "--ignore-pdf",
@@ -126,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
         LOGGER.info("Configuration: %s", config_path)
         LOGGER.info("Mode source: %s", "samples" if args.use_samples else "input")
         LOGGER.info("Dry-run: %s", "oui" if args.dry_run else "non")
+        LOGGER.info("Archivage desactive par option: %s", "oui" if args.no_archive else "non")
         LOGGER.info("Ignore PDF: %s", "oui" if args.ignore_pdf else "non")
         LOGGER.info("Filtre date: %s", "non" if args.no_date_filter else "oui")
         if args.date_from or args.date_to:
@@ -211,6 +223,11 @@ def main(argv: list[str] | None = None) -> int:
             else []
         )
         report = enrich_report_with_audits(report, reference_names)
+        reference_quality_source = (
+            report.get("audits", {}).get("out_of_scope_rci")
+            or report.get("reconciliation", [])
+        )
+        report["reference_quality"] = build_reference_suggestions(reference_quality_source)
 
         anomalies_dir = project_root / config["paths"]["anomalies_dir"]
         matching_debug_path = write_matching_debug(
@@ -250,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
         archived_files: list[Path] = []
         if args.dry_run:
             LOGGER.info("Dry-run actif: archivage ignore.")
+        elif args.no_archive:
+            LOGGER.info("Archivage desactive par option --no-archive.")
         elif args.use_samples:
             LOGGER.info("Mode samples: les exemples ne sont jamais archives.")
         else:
@@ -375,11 +394,22 @@ def _write_outputs(
     reports_dir = project_root / config["paths"]["reports_dir"]
     powerbi_dir = project_root / config["paths"]["powerbi_dir"]
     anomalies_dir = project_root / config["paths"]["anomalies_dir"]
+    corrections_dir = project_root / config["paths"].get("corrections_dir", "output/corrections")
+
+    corrective_artifacts = write_corrective_batch_outputs(report, corrections_dir, run_id)
+    missing_rci_export = write_missing_rci_export(report, anomalies_dir, run_id)
 
     artifacts = [
         write_excel_report(report, reports_dir, run_id),
         *write_powerbi_exports(report, powerbi_dir, run_id),
+        missing_rci_export,
         _write_anomaly_export(report, anomalies_dir, run_id),
+        write_reference_suggestions(
+            report.get("audits", {}).get("out_of_scope_rci") or report.get("reconciliation", []),
+            anomalies_dir,
+            run_id,
+        ),
+        *corrective_artifacts,
     ]
 
     for artifact in artifacts:
@@ -404,7 +434,7 @@ def _log_final_summary(
     LOGGER.info("")
     LOGGER.info("===== SYNTHESE FINALE AutoRCI =====")
     LOGGER.info("Statut global: %s", report.get("status", ""))
-    LOGGER.info("Factures analysees: %s", summary.get("reconciled_invoices", 0))
+    LOGGER.info("Factures ERP analysees: %s", summary.get("erp_analyzed_invoices", summary.get("reconciled_invoices", 0)))
     LOGGER.info("Periode de rapprochement: %s", summary.get("reconciliation_period", "non renseignee"))
     LOGGER.info("ERP avant filtre date: %s", summary.get("erp_rows_before_date_filter", summary.get("erp_rows", 0)))
     LOGGER.info("ERP apres filtre date: %s", summary.get("erp_rows_after_date_filter", summary.get("erp_rows", 0)))
@@ -414,18 +444,43 @@ def _log_final_summary(
     LOGGER.info("RCI exclu par periode: %s", summary.get("rci_rows_excluded_by_date", 0))
     LOGGER.info("OK: %s", summary.get("matched_invoices", 0))
     LOGGER.info("Manquantes RCI: %s", summary.get("unmatched_erp", 0))
+    LOGGER.info("Factures absentes RCI: %s", summary.get("missing_rci_invoice_count", 0))
+    LOGGER.info("Avoirs absents RCI: %s", summary.get("missing_rci_credit_note_count", 0))
+    LOGGER.info(
+        "Montant total absent RCI: %s MAD",
+        summary.get("missing_rci_total_amount", summary.get("missing_rci_amount", 0)),
+    )
     LOGGER.info("Hors scope RCI: %s", summary.get("out_of_scope_rci", 0))
     LOGGER.info("RCI seulement: %s", summary.get("unmatched_rci", 0))
     LOGGER.info("RCI hors periode: %s", summary.get("rci_out_of_period", 0))
+    LOGGER.info(
+        "Total lignes RCI/PDF hors periode: %s",
+        summary.get("total_rci_pdf_out_of_period", summary.get("rci_pdf_rows_excluded_by_date", summary.get("rci_out_of_period", 0))),
+    )
     LOGGER.info("Anomalies montant: %s", summary.get("amount_anomalies", 0))
     LOGGER.info("Anomalies date: %s", summary.get("date_anomalies", 0))
     LOGGER.info("Doublons: %s", summary.get("duplicates", 0))
     LOGGER.info("Ecarts detectes: %s", summary.get("gaps_detected", summary.get("anomalies", 0)))
+    LOGGER.info("Ecarts critiques: %s", summary.get("critical_gaps", summary.get("severity_critique", 0)))
+    LOGGER.info("Ecarts eleves: %s", summary.get("high_gaps", summary.get("severity_elevee", 0)))
+    LOGGER.info("Ecarts moyens: %s", summary.get("medium_gaps", summary.get("severity_moyenne", 0)))
+    LOGGER.info("Lignes information: %s", summary.get("information_lines", summary.get("severity_information", 0)))
+    LOGGER.info(
+        "Lignes a verifier referentiel: %s",
+        summary.get("reference_review_lines", summary.get("severity_a_verifier", 0)),
+    )
+    LOGGER.info("Batch correctif candidat: %s", "oui" if summary.get("corrective_batch_generated") else "non")
+    LOGGER.info("Factures incluses batch correctif: %s", summary.get("corrective_batch_invoice_count", 0))
+    LOGGER.info("Montant batch correctif: %s MAD", summary.get("corrective_batch_total_amount", 0))
     LOGGER.info("Montant impacte total: %s MAD", summary.get("total_impacted_amount", summary.get("total_amount_gap", 0)))
     LOGGER.info("Montant manquant RCI: %s MAD", summary.get("missing_rci_amount", 0))
     LOGGER.info("Taux de rapprochement: %s", summary.get("matching_rate", 0))
     if summary.get("no_rci_flux_in_period_alert"):
         LOGGER.warning("Attention : aucun flux RCI dans la période de rapprochement.")
+    if summary.get("pdf_period_mismatch_alert"):
+        LOGGER.warning("Attention : les PDF chargés ne correspondent pas à la période du flux RCI.")
+    if not summary.get("corrective_batch_generated") and report.get("corrective_batch", {}).get("warning"):
+        LOGGER.info("%s", report["corrective_batch"]["warning"])
     LOGGER.info("Rapport Excel: %s", report_path or "non genere")
     LOGGER.info("Historique Power BI: %s", history_path or "non genere")
     LOGGER.info("Email: %s", email_status)

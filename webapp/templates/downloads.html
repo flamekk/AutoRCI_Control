@@ -5,31 +5,37 @@
 <div class="page-header">
   <div>
     <h1>Téléchargements</h1>
-    <p class="text-muted mb-0">Rapports, exports Power BI, anomalies et logs disponibles.</p>
+    <p class="text-muted mb-0">Rapports, exports Power BI, audits, corrections candidates et logs disponibles.</p>
   </div>
 </div>
 
 <div class="row g-3">
   {% for category, paths in files.items() %}
     <div class="col-12 col-xl-6">
-      <div class="panel">
+      <div class="panel download-panel">
         {% set meta = download_metadata[category] %}
         <h2><i class="bi {{ meta.icon }} me-2"></i>{{ meta.label }}</h2>
         {% if paths %}
-          <div class="list-group download-list">
+          <div class="download-list">
             {% for path in paths %}
-              <a class="list-group-item list-group-item-action download-item" href="{{ url_for('download_file', category=category, filename=path.name) }}">
+              <div class="download-item">
                 <span class="download-name text-truncate" title="{{ path.name }}">
-                  <i class="bi bi-download me-2"></i>{{ path.name }}
+                  <i class="bi {{ meta.icon }} me-2"></i>{{ path.name }}
                 </span>
                 <span class="download-meta">
-                  {{ path.stat().st_mtime|mtime }} · {{ path.stat().st_size|filesize }}
+                  Modifié le {{ path.stat().st_mtime|mtime }} · {{ path.stat().st_size|filesize }}
                 </span>
-              </a>
+                <a class="btn btn-outline-primary btn-sm download-button" href="{{ url_for('download_file', category=category, filename=path.name) }}">
+                  <i class="bi bi-download me-1"></i>Télécharger
+                </a>
+              </div>
             {% endfor %}
           </div>
         {% else %}
-          <div class="empty-state">Aucun fichier.</div>
+          <div class="empty-state">
+            <i class="bi {{ meta.icon }} empty-state-icon"></i>
+            <span>Aucun fichier disponible dans cette catégorie.</span>
+          </div>
         {% endif %}
       </div>
     </div>

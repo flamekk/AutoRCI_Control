@@ -1,0 +1,91 @@
+2026-06-01 15:13:42,770 | INFO | autorcicontrol | Demarrage AutoRCI_Control
+2026-06-01 15:13:42,770 | INFO | autorcicontrol | Racine projet: C:\Users\PC\Desktop\AutoRCI_Control\.tmp\pytest-of-PC\pytest-0\test_no_archive_option_skips_a0
+2026-06-01 15:13:42,770 | INFO | autorcicontrol | Configuration: C:\Users\PC\Desktop\AutoRCI_Control\.tmp\pytest-of-PC\pytest-0\test_no_archive_option_skips_a0\config.yaml
+2026-06-01 15:13:42,771 | INFO | autorcicontrol | Mode source: input
+2026-06-01 15:13:42,771 | INFO | autorcicontrol | Dry-run: non
+2026-06-01 15:13:42,771 | INFO | autorcicontrol | Archivage desactive par option: oui
+2026-06-01 15:13:42,772 | INFO | autorcicontrol | Ignore PDF: non
+2026-06-01 15:13:42,772 | INFO | autorcicontrol | Filtre date: oui
+2026-06-01 15:13:42,772 | INFO | autorcicontrol | Dossier analyse: C:\Users\PC\Desktop\AutoRCI_Control\.tmp\pytest-of-PC\pytest-0\test_no_archive_option_skips_a0\input
+2026-06-01 15:13:42,772 | INFO | autorcicontrol | ERP: 1 fichier(s) detecte(s)
+2026-06-01 15:13:42,772 | INFO | autorcicontrol |  - erp.xlsx
+2026-06-01 15:13:42,772 | INFO | autorcicontrol | RCI: 1 fichier(s) detecte(s)
+2026-06-01 15:13:42,772 | INFO | autorcicontrol |  - rci.txt
+2026-06-01 15:13:42,772 | INFO | autorcicontrol | PDF: 0 fichier(s) detecte(s)
+2026-06-01 15:13:42,773 | WARNING | autorcicontrol | Aucun PDF detecte dans C:\Users\PC\Desktop\AutoRCI_Control\.tmp\pytest-of-PC\pytest-0\test_no_archive_option_skips_a0\input\pdf. Le pipeline continue avec ERP/RCI; les dates d'echeance et origines PDF seront absentes.
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 4/12 - Extraction ERP
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 4b/12 - Chargement referentiel couverture RCI
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 5/12 - Extraction RCI
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 6/12 - Extraction PDF
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 6b/12 - Filtrage periode ERP
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 7/12 - Reconciliation ERP / RCI / PDF
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etapes 8-9/12 - Generation rapport Excel et exports Power BI
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Etape 10/12 - Email
+2026-06-01 15:13:42,773 | INFO | autorcicontrol | Statut email: disabled
+2026-06-01 15:13:42,774 | INFO | autorcicontrol | Etape 11/12 - Archivage
+2026-06-01 15:13:42,774 | INFO | autorcicontrol | Archivage desactive par option --no-archive.
+2026-06-01 15:13:42,774 | INFO | autorcicontrol | Etape 12/12 - Synthese finale
+2026-06-01 15:13:42,774 | INFO | autorcicontrol | Execution terminee avec succes.
+2026-06-01 15:13:42,873 | WARNING | src.reference_loader | Referentiel RCI introuvable: C:\Users\PC\Desktop\AutoRCI_Control\.tmp\pytest-of-PC\pytest-0\test_missing_reference_continu0\reference_absente. Le controle continue sans filtrage de couverture.
+2026-06-01 15:13:42,874 | WARNING | src.reference_loader | Referentiel RCI absent ou vide: toutes les lignes ERP restent dans le scope de controle.
+2026-06-01 15:13:42,922 | INFO | src.reference_loader | Referentiel RCI rci.xlsx: feuilles detectees=['Sheet1'].
+2026-06-01 15:13:42,930 | INFO | src.reference_loader | Referentiel RCI rci.xlsx [Sheet1]: 2 ligne(s) utiles, colonnes code=[], nom=['Affaires'], strategie=default_header.
+2026-06-01 15:13:42,931 | INFO | src.reference_loader | Referentiel RCI charge: 1 fichier(s), 2 ligne(s) utiles, 0 code(s), 2 nom(s).
+2026-06-01 15:13:42,931 | INFO | src.reference_loader | Exemples codes RCI normalises: (aucun)
+2026-06-01 15:13:42,931 | INFO | src.reference_loader | Exemples noms RCI normalises: GARAGE ALPHA, GARAGE BETA
+2026-06-01 15:13:42,987 | INFO | src.reference_loader | Referentiel RCI rci.xlsx: feuilles detectees=['Sheet1'].
+2026-06-01 15:13:43,002 | INFO | src.reference_loader | Referentiel RCI rci.xlsx [Sheet1]: 2 ligne(s) utiles, colonnes code=[], nom=['Nom'], strategie=default_header.
+2026-06-01 15:13:43,003 | INFO | src.reference_loader | Referentiel RCI charge: 1 fichier(s), 2 ligne(s) utiles, 0 code(s), 2 nom(s).
+2026-06-01 15:13:43,003 | INFO | src.reference_loader | Exemples codes RCI normalises: (aucun)
+2026-06-01 15:13:43,003 | INFO | src.reference_loader | Exemples noms RCI normalises: CLIENT NORD, SOCIETE ETOILE
+2026-06-01 15:13:43,056 | INFO | src.reference_loader | Referentiel RCI rci.xlsx: feuilles detectees=['Sheet1'].
+2026-06-01 15:13:43,070 | INFO | src.reference_loader | Fallback referentiel RCI: colonne unique texte utilisee comme nom (0).
+2026-06-01 15:13:43,073 | INFO | src.reference_loader | Referentiel RCI rci.xlsx [Sheet1]: 2 ligne(s) utiles, colonnes code=[], nom=['reference_name'], strategie=single_text_column_raw.
+2026-06-01 15:13:43,075 | INFO | src.reference_loader | Referentiel RCI charge: 1 fichier(s), 2 ligne(s) utiles, 0 code(s), 2 nom(s).
+2026-06-01 15:13:43,075 | INFO | src.reference_loader | Exemples codes RCI normalises: (aucun)
+2026-06-01 15:13:43,075 | INFO | src.reference_loader | Exemples noms RCI normalises: GARAGE ALPHA, GARAGE BETA
+2026-06-01 15:13:43,164 | INFO | src.reference_loader | Referentiel RCI rci.xlsx: feuilles detectees=['Sheet1'].
+2026-06-01 15:13:43,169 | INFO | src.reference_loader | Referentiel RCI rci.xlsx [Sheet1]: 2 ligne(s) utiles, colonnes code=['CODE CLIENT'], nom=['RAISON SOCIALE'], strategie=detected_header_row.
+2026-06-01 15:13:43,169 | INFO | src.reference_loader | Referentiel RCI charge: 1 fichier(s), 2 ligne(s) utiles, 2 code(s), 2 nom(s).
+2026-06-01 15:13:43,169 | INFO | src.reference_loader | Exemples codes RCI normalises: 123, 456
+2026-06-01 15:13:43,170 | INFO | src.reference_loader | Exemples noms RCI normalises: GARAGE ALPHA, GARAGE BETA
+2026-06-01 15:13:43,177 | INFO | src.date_filter | Periode de rapprochement utilisee: 2026-04-30 -> 2026-04-30 (mode=manual, source=cli).
+2026-06-01 15:13:43,177 | INFO | src.date_filter | ERP avant filtre date: 0 ligne(s).
+2026-06-01 15:13:43,178 | INFO | src.date_filter | ERP apres filtre date: 0 ligne(s).
+2026-06-01 15:13:43,178 | INFO | src.date_filter | ERP exclu par filtre date: 0 ligne(s).
+2026-06-01 15:13:43,178 | INFO | src.date_filter | RCI avant filtre date: 1 ligne(s).
+2026-06-01 15:13:43,178 | INFO | src.date_filter | RCI apres filtre date: 0 ligne(s).
+2026-06-01 15:13:43,179 | INFO | src.date_filter | RCI exclu par periode: 1 ligne(s).
+2026-06-01 15:13:43,179 | INFO | src.date_filter | PDF avant filtre date: 0 ligne(s).
+2026-06-01 15:13:43,179 | INFO | src.date_filter | PDF apres filtre date: 0 ligne(s).
+2026-06-01 15:13:43,179 | INFO | src.date_filter | PDF exclu par periode: 0 ligne(s).
+2026-06-01 15:13:43,179 | WARNING | src.date_filter | Attention : aucun flux RCI dans la période de rapprochement.
+2026-06-01 15:13:43,203 | INFO | src.reconcile | Rapprochement RCI_HORS_PERIODE: 1 ligne(s)
+2026-06-01 15:13:43,213 | INFO | src.date_filter | Periode de rapprochement utilisee: 2026-04-30 -> 2026-04-30 (mode=manual, source=cli).
+2026-06-01 15:13:43,213 | INFO | src.date_filter | ERP avant filtre date: 63 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | ERP apres filtre date: 63 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | ERP exclu par filtre date: 0 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | RCI avant filtre date: 97 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | RCI apres filtre date: 0 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | RCI exclu par periode: 97 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | PDF avant filtre date: 0 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | PDF apres filtre date: 0 ligne(s).
+2026-06-01 15:13:43,214 | INFO | src.date_filter | PDF exclu par periode: 0 ligne(s).
+2026-06-01 15:13:43,214 | WARNING | src.date_filter | Attention : aucun flux RCI dans la période de rapprochement.
+2026-06-01 15:13:43,310 | INFO | src.reconcile | Rapprochement MANQUANTE_RCI: 63 ligne(s)
+2026-06-01 15:13:43,311 | INFO | src.reconcile | Rapprochement RCI_HORS_PERIODE: 97 ligne(s)
+2026-06-01 15:13:43,325 | INFO | src.date_filter | Periode de rapprochement utilisee: 2026-04-29 -> 2026-04-29 (mode=manual, source=cli).
+2026-06-01 15:13:43,325 | INFO | src.date_filter | ERP avant filtre date: 97 ligne(s).
+2026-06-01 15:13:43,325 | INFO | src.date_filter | ERP apres filtre date: 97 ligne(s).
+2026-06-01 15:13:43,325 | INFO | src.date_filter | ERP exclu par filtre date: 0 ligne(s).
+2026-06-01 15:13:43,325 | INFO | src.date_filter | RCI avant filtre date: 97 ligne(s).
+2026-06-01 15:13:43,325 | INFO | src.date_filter | RCI apres filtre date: 97 ligne(s).
+2026-06-01 15:13:43,325 | INFO | src.date_filter | RCI exclu par periode: 0 ligne(s).
+2026-06-01 15:13:43,326 | INFO | src.date_filter | PDF avant filtre date: 0 ligne(s).
+2026-06-01 15:13:43,326 | INFO | src.date_filter | PDF apres filtre date: 0 ligne(s).
+2026-06-01 15:13:43,326 | INFO | src.date_filter | PDF exclu par periode: 0 ligne(s).
+2026-06-01 15:13:43,444 | INFO | src.reconcile | Rapprochement OK: 97 ligne(s)
+2026-06-01 15:13:43,532 | INFO | src.reconcile | Rapprochement MANQUANTE_RCI: 1 ligne(s)
+2026-06-01 15:13:43,561 | INFO | src.reconcile | Rapprochement MANQUANTE_RCI: 1 ligne(s)
+2026-06-01 15:13:43,562 | INFO | src.reconcile | Rapprochement RCI_HORS_PERIODE: 1 ligne(s)
+2026-06-01 15:13:43,649 | INFO | src.reconcile | Rapprochement MANQUANTE_RCI: 1 ligne(s)

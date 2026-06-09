@@ -20,6 +20,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "reports_dir": "output/reports",
         "powerbi_dir": "output/powerbi",
         "anomalies_dir": "output/anomalies",
+        "corrections_dir": "output/corrections",
     },
     "file_detection": {
         "extensions": {
@@ -56,8 +57,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "sender": "",
         "recipients": [],
         "smtp_host": "",
+        "smtp_server": "",
         "smtp_port": 587,
+        "username": "",
         "smtp_username": "",
+        "password_env_var": "AUTORCI_EMAIL_PASSWORD",
         "smtp_password_env_var": "AUTORCI_SMTP_PASSWORD",
         "use_tls": True,
         "use_ssl": False,
@@ -75,6 +79,7 @@ STRUCTURE_DIRECTORIES = [
     "output/reports",
     "output/powerbi",
     "output/anomalies",
+    "output/corrections",
     "archive/erp",
     "archive/rci",
     "archive/pdf",

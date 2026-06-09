@@ -24,7 +24,8 @@
         <form method="post" enctype="multipart/form-data" class="upload-form">
           <input type="hidden" name="source_type" value="{{ source_type }}">
           <div class="mb-2">
-            <input class="form-control" type="file" name="file" required>
+            <label class="form-label" for="file_{{ source_type }}">Fichier à déposer</label>
+            <input class="form-control" id="file_{{ source_type }}" type="file" name="file" required>
           </div>
           <div class="d-flex align-items-center justify-content-between gap-2">
             <div class="extension-list">
@@ -32,7 +33,7 @@
                 <span class="badge rounded-pill text-bg-light">{{ extension }}</span>
               {% endfor %}
             </div>
-            <button type="submit" class="btn btn-primary btn-sm">Uploader</button>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-cloud-arrow-up me-1"></i>Déposer</button>
           </div>
         </form>
       </div>
@@ -56,7 +57,10 @@
             {% endfor %}
           </ul>
         {% else %}
-          <div class="empty-state">Aucun fichier.</div>
+          <div class="empty-state">
+            <i class="bi {{ source_metadata[source_type].icon }} empty-state-icon"></i>
+            <span>Aucun fichier. Déposez un fichier {{ source_metadata[source_type].short_label }} pour alimenter le prochain traitement.</span>
+          </div>
         {% endif %}
       </div>
     {% endfor %}
